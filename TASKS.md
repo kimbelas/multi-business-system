@@ -52,4 +52,3 @@ Generated from Groundwork. Boxes are yours to tick; the plan lives in the vault.
 
 - [ ] Bundle budget as a CI gate, not a habit _(Medium, Small)_
 - [ ] Hand-off the owner and staff can use without the developer _(Medium, Medium)_
-

@@ -55,8 +55,8 @@ cash matches.
 
 ## Decisions already made
 
-- **Core plus extensions.** One sentence is the core schema: *a staff member at a
-  branch performs a service for a client, and money changes hands at a point in time.*
+- **Core plus extensions.** One sentence is the core schema: _a staff member at a
+  branch performs a service for a client, and money changes hands at a point in time._
   Business-specific tables are satellites referencing core by ID. A fourth business
   type is one extension table and one feature folder — zero core changes.
 - **RLS is the only authorization layer.** The UI hides what a role cannot do; row-level
@@ -201,4 +201,3 @@ notifications → hardening and launch.
 - Appointment entry and a T-24h reminder were added to v1 by answer, on top of a sequence of milestones that priced neither, and nothing was removed to pay for them. The spec still lists both as V2 and migrated the schema in v1 specifically so the UI could wait. The cost comes out of hardening or out of the launch date, and neither has been chosen — which usually means it comes out of hardening. — likelihood High, impact Medium. Mitigation: Decide before phase 2 what pays for it: a named cut from phases 5 to 7, or a launch date moved on the record. Ship the smallest booking that makes a reminder possible — one appointment, one therapist, one room — and hold the rest in v2 rather than letting the scope grow to fit the schema that already exists.
 - The constraint that prevents duplicate open shifts gets dropped rather than replaced. Letting a staff member clock in while yesterday's shift is still open requires changing a partial unique index that permits one open shift per person, and the cheapest change is to delete it — which also removes the guard against one person accidentally holding two open shifts at the same branch on the same day. That is the duplicate-hours dispute the index existed to prevent, reintroduced while solving a different dispute. — likelihood Medium, impact Medium. Mitigation: Replace rather than drop. Decide the narrower constraint in phase 2 — one open shift per staff member per branch per day, or a flag distinguishing a stale shift from a live one — and write a test that tries to create the case the old index prevented and expects to fail.
 - The variance bands are never set. No threshold ships in week one and the bands are to come from the first two weeks of real closes, but nothing in the plan schedules that review and no phase owns it. A screen showing a bare number works well enough that the omission is never felt, and the variance figure becomes a column nobody reads — which is the outcome the blind close was built to prevent, arriving by patience rather than by error. — likelihood Medium, impact Medium. Mitigation: Put the band-setting review on the launch checklist with a date rather than a phase, and have the dashboard state that no bands are set until they are, so the absence is on screen instead of being assumed away.
-

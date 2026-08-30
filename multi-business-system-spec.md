@@ -12,20 +12,20 @@ A single web application that lets one owner manage three small businesses in th
 
 ### Problems this system solves (research-validated)
 
-| # | Problem | Feature that solves it |
-|---|---------|------------------------|
-| P1 | Cash leakage / underreported sales across branches the owner can't watch | Transaction log with staff attribution + daily close with variance |
-| P2 | No centralized view of multi-branch performance | Owner dashboard (mobile-first) |
-| P3 | Laundry orders lost, mixed up, or stuck in limbo ("washed but never marked ready") | Ticketed order lifecycle with status tracking |
-| P4 | Spa no-shows and forgotten appointments | SMS reminder pipeline (v1: outbox + reminders; v2: full booking) |
-| P5 | Skin care clients silently never rebooking | Client records + "due for follow-up" list + rebooking SMS |
-| P6 | Manual notebook/Excel records — errors, no audit trail | 30-second digital entry flows, immutable audit fields |
-| P7 | Attendance disputes | Clock in/out per branch |
+| #   | Problem                                                                            | Feature that solves it                                             |
+| --- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| P1  | Cash leakage / underreported sales across branches the owner can't watch           | Transaction log with staff attribution + daily close with variance |
+| P2  | No centralized view of multi-branch performance                                    | Owner dashboard (mobile-first)                                     |
+| P3  | Laundry orders lost, mixed up, or stuck in limbo ("washed but never marked ready") | Ticketed order lifecycle with status tracking                      |
+| P4  | Spa no-shows and forgotten appointments                                            | SMS reminder pipeline (v1: outbox + reminders; v2: full booking)   |
+| P5  | Skin care clients silently never rebooking                                         | Client records + "due for follow-up" list + rebooking SMS          |
+| P6  | Manual notebook/Excel records — errors, no audit trail                             | 30-second digital entry flows, immutable audit fields              |
+| P7  | Attendance disputes                                                                | Clock in/out per branch                                            |
 
 ### Explicit non-goals (do NOT build)
 
 - **Payroll.** PH payroll (SSS, PhilHealth, Pag-IBIG, 13th month, withholding tax) is out of scope. Attendance data must be **exportable to CSV** so whoever does payroll today can consume it.
-- **BIR-compliant official receipts.** The system prints/sends *acknowledgment slips* and *order tickets* only. Never label any output "Official Receipt" or "OR".
+- **BIR-compliant official receipts.** The system prints/sends _acknowledgment slips_ and _order tickets_ only. Never label any output "Official Receipt" or "OR".
 - **Offline mode** in v1. Design data entry to be retry-friendly (idempotent server actions), but no service-worker sync.
 - **Payment processing.** The system records that a GCash/Maya/cash payment happened (with reference number); it never moves money.
 - **Granular permission-matrix RBAC.** Three coarse roles only (§7).
@@ -34,18 +34,18 @@ A single web application that lets one owner manage three small businesses in th
 
 ## 2. Tech Stack
 
-| Layer | Choice | Notes |
-|-------|--------|-------|
-| Framework | **Next.js (App Router)**, TypeScript `strict: true` | React Server Components by default; Client Components only where interactivity requires |
-| Styling | **Tailwind CSS** | Mobile-first; the owner uses a phone |
-| UI primitives | **shadcn/ui** | Copy-in components; keeps the Worker bundle lean |
-| Backend | **Supabase** — Postgres, Auth, Row Level Security | RLS is the *only* authorization enforcement layer |
-| Validation | **zod** | Every server action input and every API boundary |
-| Hosting | **Cloudflare Workers** via **`@opennextjs/cloudflare`** (OpenNext adapter) | Node.js runtime. NOT `@cloudflare/next-on-pages` (legacy, Edge-runtime only) |
-| Scheduled jobs | **Cloudflare Cron Trigger** → `/api/cron/notifications` | Protected by `CRON_SECRET` header check |
-| SMS | Provider abstraction with a **Semaphore** driver (PH-local) | Twilio driver optional later; see §10 |
-| Testing | **Vitest** (unit) + **Playwright** (e2e, critical flows only) | See §15 |
-| Package manager | **pnpm** | |
+| Layer           | Choice                                                                     | Notes                                                                                   |
+| --------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Framework       | **Next.js (App Router)**, TypeScript `strict: true`                        | React Server Components by default; Client Components only where interactivity requires |
+| Styling         | **Tailwind CSS**                                                           | Mobile-first; the owner uses a phone                                                    |
+| UI primitives   | **shadcn/ui**                                                              | Copy-in components; keeps the Worker bundle lean                                        |
+| Backend         | **Supabase** — Postgres, Auth, Row Level Security                          | RLS is the _only_ authorization enforcement layer                                       |
+| Validation      | **zod**                                                                    | Every server action input and every API boundary                                        |
+| Hosting         | **Cloudflare Workers** via **`@opennextjs/cloudflare`** (OpenNext adapter) | Node.js runtime. NOT `@cloudflare/next-on-pages` (legacy, Edge-runtime only)            |
+| Scheduled jobs  | **Cloudflare Cron Trigger** → `/api/cron/notifications`                    | Protected by `CRON_SECRET` header check                                                 |
+| SMS             | Provider abstraction with a **Semaphore** driver (PH-local)                | Twilio driver optional later; see §10                                                   |
+| Testing         | **Vitest** (unit) + **Playwright** (e2e, critical flows only)              | See §15                                                                                 |
+| Package manager | **pnpm**                                                                   |                                                                                         |
 
 ### Stack constraints to respect
 
@@ -60,7 +60,7 @@ A single web application that lets one owner manage three small businesses in th
 
 One sentence describes what all three businesses share:
 
-> *A staff member at a branch performs a service for a client, and money changes hands at a point in time.*
+> _A staff member at a branch performs a service for a client, and money changes hands at a point in time._
 
 That sentence is the **core schema**. Everything business-specific is an **extension** (satellite table) that references core rows by ID. Extensions never modify core; core never knows extensions exist.
 
@@ -362,7 +362,7 @@ create trigger on_transaction_touch_client
 
 ## 5. Row Level Security — the enforcement layer
 
-**Golden rule:** the Next.js app is UX only. Authorization is enforced *exclusively* by RLS. A staff member with devtools open and the anon key must receive **zero** rows they aren't entitled to. Every table gets `enable row level security`; there is no table without it.
+**Golden rule:** the Next.js app is UX only. Authorization is enforced _exclusively_ by RLS. A staff member with devtools open and the anon key must receive **zero** rows they aren't entitled to. Every table gets `enable row level security`; there is no table without it.
 
 ### 5.1 Helper functions
 
@@ -588,7 +588,7 @@ create trigger protect_tx before update on public.transactions
 
 1. **Sign-in:** Supabase Auth, email+password (staff accounts are created by the owner; no self-signup — disable public signups in Supabase dashboard, owner invites via `supabase.auth.admin` in a server action using the service role key, server-side only).
 2. **Session management:** `@supabase/ssr` package. Middleware (`src/middleware.ts`) refreshes the session cookie on every request and redirects unauthenticated users to `/login`. Route group `(app)` requires a session.
-3. **Context resolution:** after login, the root `(app)/layout.tsx` (RSC) loads the user's memberships. 
+3. **Context resolution:** after login, the root `(app)/layout.tsx` (RSC) loads the user's memberships.
    - Owner with N businesses → business switcher (workspace-switcher pattern, persists selection in a cookie).
    - Staff with exactly one branch → land directly on that branch's home screen; no switcher shown.
 4. **Active scope:** `activeBranchId` / `activeBusinessId` live in a cookie (server-readable) and a client context. Every query is scoped by it — but remember, this is convenience only; RLS re-checks everything.
@@ -600,20 +600,20 @@ create trigger protect_tx before update on public.transactions
 
 Three roles. Do not add more in v1.
 
-| Capability | staff | manager | owner |
-|---|---|---|---|
-| Clock in/out (self) | ✅ | ✅ | ✅ |
-| Record sale/expense (self-attributed) | ✅ | ✅ | ✅ |
-| View own transactions (for ticket reprint) | ✅ | ✅ | ✅ |
-| Create/advance laundry orders | ✅ | ✅ | ✅ |
-| View branch transaction list & totals | ❌ | ✅ (own branch) | ✅ (all) |
-| Void a transaction (reason required) | ❌ | ✅ (own branch) | ✅ |
-| Perform daily close | ❌ | ✅ (own branch) | ✅ |
-| View attendance (others) | ❌ | ✅ (own branch) | ✅ |
-| Manage clients | ✅ | ✅ | ✅ |
-| Dashboard (cross-branch, cross-business) | ❌ | ❌ | ✅ |
-| Manage branches, businesses, staff, roles | ❌ | ❌ | ✅ |
-| Export CSV (attendance, transactions) | ❌ | ✅ (own branch) | ✅ |
+| Capability                                 | staff | manager         | owner    |
+| ------------------------------------------ | ----- | --------------- | -------- |
+| Clock in/out (self)                        | ✅    | ✅              | ✅       |
+| Record sale/expense (self-attributed)      | ✅    | ✅              | ✅       |
+| View own transactions (for ticket reprint) | ✅    | ✅              | ✅       |
+| Create/advance laundry orders              | ✅    | ✅              | ✅       |
+| View branch transaction list & totals      | ❌    | ✅ (own branch) | ✅ (all) |
+| Void a transaction (reason required)       | ❌    | ✅ (own branch) | ✅       |
+| Perform daily close                        | ❌    | ✅ (own branch) | ✅       |
+| View attendance (others)                   | ❌    | ✅ (own branch) | ✅       |
+| Manage clients                             | ✅    | ✅              | ✅       |
+| Dashboard (cross-branch, cross-business)   | ❌    | ❌              | ✅       |
+| Manage branches, businesses, staff, roles  | ❌    | ❌              | ✅       |
+| Export CSV (attendance, transactions)      | ❌    | ✅ (own branch) | ✅       |
 
 UI hides what a role can't do; RLS enforces it.
 
@@ -677,32 +677,39 @@ src/
 ## 9. Feature Specifications (v1)
 
 ### 9.1 Sale entry (`/b/[id]/sell`) — the 30-second rule
+
 - Fields: amount (numpad-style large input), payment method (cash default; gcash/maya reveal a reference-no field), optional description, optional client (typeahead by name/phone, inline "quick add").
 - Server action `recordSale`: zod-validate → insert transaction → return receipt data. Idempotency: client generates a UUID per submission attempt; retries reuse it (id supplied to insert, conflict = success).
 - Success screen shows large confirmation + "New sale" button. Total taps for a cash sale: ≤4.
 
 ### 9.2 Laundry orders (`/b/[id]/laundry`)
+
 - **Intake (`/new`):** client (quick add), weight kg, items note, amount, payment (allow `unpaid` note via kind=sale on claim instead — v1 decision: payment recorded at intake OR at claim; a toggle "pay now / pay on claim". "Pay on claim" creates the order with `transaction_id` of a zero-hold? NO — keep simple: order requires a transaction; "pay on claim" creates the transaction at claim time and intake stores `transaction_id` as the intake transaction only when paid. Implement as: `laundry_orders.transaction_id` nullable in that case is WRONG per schema — so: v1 supports **pay at intake only**. Pay-on-claim goes to the v2 backlog. Do not redesign the schema for it now.)
 - Ticket number: per-branch sequence formatted `${branchCode}-${n.toString().padStart(4,'0')}`. Generate via a Postgres sequence per branch (table `branch_counters(branch_id, next_no)` with `select ... for update`).
 - **Board:** columns = status. Tap an order → advance to next status (forward-only; `laundry-machine.ts` map is the single source of truth, mirrored by a DB trigger). Reaching `ready` enqueues `laundry_ready` in the outbox (if client has a phone).
 - **Claim:** mark claimed, timestamp. Search by ticket no or client phone.
 
 ### 9.3 Daily close (`/b/[id]/close`)
+
 - Server computes `expected_cash` = Σ cash sales − Σ cash expenses (non-voided, branch, local date Asia/Manila). Show the number ONLY after declared amount is entered (prevents anchoring — staff should count the drawer blind, manager enters the count).
 - Manager enters declared cash + notes → insert `daily_closes`. Variance renders green (±0), amber (small), red — thresholds: |variance| ≤ ₱50 amber floor configurable later; hardcode 0/50 for v1.
 - A branch with an un-closed previous business day shows a persistent banner.
 
 ### 9.4 Attendance (`/b/[id]/attendance`)
+
 - One giant Clock In / Clock Out button (state from the open-shift partial unique index). Managers see a day/week table for the branch. CSV export (manager/owner).
 
 ### 9.5 Owner dashboard (`/dashboard`)
+
 - Mobile-first cards, one per business → branches within. Today + this week: revenue, expense, tx count, open laundry orders, staff clocked in now, latest close variance (red badge if |variance| > 0 or close missing).
 - One aggregate query per business via a Postgres view `branch_daily_summary` (security invoker so RLS applies).
 
 ### 9.6 Clients (`/b/[id]/clients`)
+
 - List, search, detail (visits from transactions, laundry history). "Due for follow-up" tab: skincare clients with `last_visit_at` older than N days (default 30) → button enqueues `rebooking_nudge` (rate-limit: max 1 per client per 14 days, enforce by checking outbox history).
 
 ### 9.7 Admin (owner)
+
 - CRUD businesses, branches; invite staff (email → service-role invite → membership row); change roles; deactivate staff (delete membership, keep profile + history).
 
 ---
@@ -829,11 +836,13 @@ Multi-business management system (laundry / spa / skincare) for a PH owner.
 Read docs/SPEC.md before any task — it is the source of truth.
 
 ## Commands
+
 - pnpm dev · pnpm test · pnpm lint · pnpm typecheck
-- pnpm build && npx opennextjs-cloudflare build   # bundle-size check
-- supabase start · supabase db reset              # local db + seed
+- pnpm build && npx opennextjs-cloudflare build # bundle-size check
+- supabase start · supabase db reset # local db + seed
 
 ## Hard rules
+
 - Authorization = RLS only. Never rely on UI checks. Never weaken a policy to "fix" a bug.
 - transactions are immutable: void + re-enter, never edit/delete.
 - Service-role key: lib/supabase/admin.ts only ('server-only'). Never NEXT_PUBLIC.
@@ -844,10 +853,11 @@ Read docs/SPEC.md before any task — it is the source of truth.
 - Never label any output "Official Receipt"/"OR". No payroll computation.
 
 ## Definition of done (every task)
+
 typecheck ✓ lint ✓ unit tests ✓ RLS suite ✓ (if schema touched) manual check of
 the affected flow as staff AND manager personas from the seed data.
 ```
 
 ---
 
-*End of specification.*
+_End of specification._

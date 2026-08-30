@@ -1,0 +1,19 @@
+{
+  // Cloudflare Workers, via the OpenNext adapter. NOT @cloudflare/next-on-pages, which is
+  // the legacy edge-only adapter and cannot run the Node runtime this app needs.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bizdesk",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-08-30",
+  // nodejs_compat is required by the adapter; global_fetch_strictly_public keeps a fetch to
+  // our own hostname going out through the internet rather than looping back inside the
+  // Worker, which is the behaviour Next assumes.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS",
+  },
+  "observability": { "enabled": true },
+  // Secrets are set with `wrangler secret put`, never listed here - this file is committed.
+  // Section 11 names them: the Supabase keys, CRON_SECRET and the SMS provider key.
+}
