@@ -1,0 +1,36 @@
+name: Deploy
+
+# Deploys on main, after CI has passed. This is the authoritative deploy: the adapter does
+# not build reliably on Windows, so a developer machine is not a fallback for it.
+#
+# Needs one repository secret before it can run:
+#   CLOUDFLARE_API_TOKEN  - a token with the "Edit Cloudflare Workers" template
+#   CLOUDFLARE_ACCOUNT_ID - from the Workers dashboard
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    # Never deploy a red build. workflow_run fires whatever the outcome, so this is checked
+    # rather than assumed.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Deploy to Cloudflare Workers
+        run: pnpm cf:deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

@@ -1,0 +1,77 @@
+name: CI
+
+# Every check that can fail the build, on Linux - which is also the only platform the
+# Cloudflare adapter is fully supported on. OpenNext warns it is not fully compatible with
+# Windows, so the authoritative build is here rather than on a developer's machine.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  # A second push supersedes the first: an in-flight run of an older commit tells you nothing.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Format
+        run: pnpm format:check
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: pnpm test:e2e
+
+  bundle:
+    # Card #15: the bundle budget is a CI gate, not a habit. The Workers free plan caps a
+    # Worker at 3 MiB compressed, and a build that only ever runs at deploy time is a budget
+    # discovered at launch.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the Worker bundle
+        run: pnpm cf:build
+
+      - name: Fail if the Worker exceeds the free-plan budget
+        run: |
+          # gzip is what Cloudflare measures against the 3 MiB limit. Reported either way,
+          # so a run that passes still tells you how much headroom is left.
+          size=$(gzip -c .open-next/worker.js | wc -c)
+          limit=$((3 * 1024 * 1024))
+          printf 'Worker bundle: %s bytes gzipped (limit %s)
+' "$size" "$limit"
+          if [ "$size" -gt "$limit" ]; then
+            echo "::error::Worker bundle is over the 3 MiB compressed limit"
+            exit 1
+          fi
