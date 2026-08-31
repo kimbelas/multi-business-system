@@ -122,8 +122,11 @@ jobs:
     # eventually points at production by accident. So: run it by hand from the Actions tab, or
     # on a schedule, and never as a side effect of pushing a README change.
     #
-    # It also skips itself rather than failing when the secrets are absent, which is what makes
-    # a fork of this repo able to run CI at all.
+    # It used to skip itself rather than fail when the secrets were absent, on the argument that
+    # this is what lets a fork run CI. That argument was wrong twice over: this job never runs on
+    # a push or a pull request, so a fork does not reach it, and "skip" on a job that exists to
+    # assert authorization is indistinguishable from "pass" in every summary anyone reads. It
+    # skipped its way to green on the only run it ever had. It now fails when it cannot run.
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     steps:
@@ -136,16 +139,33 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Say which project this is about to write to
+      - name: Say which project this is about to write to, and refuse to run on half a set
         # The host only, never the key. Pointing this at the wrong project is the one mistake
         # that matters here, and a log line naming it is the cheapest guard against it.
+        #
+        # All three are checked, not just the URL. This step used to read the URL alone, and on
+        # the first run it ever had it printed a target, printed no warning, and let vitest skip
+        # all 36 tests to a green job - because SUPABASE_SERVICE_ROLE_KEY was never configured.
+        # A job whose whole purpose is asserting authorization must not be able to pass without
+        # asserting any.
+        #
+        # Failing rather than warning is the point, and it does not cost a fork anything: this
+        # job only runs on workflow_dispatch and schedule, so nobody reaches it by pushing. A
+        # fork that deliberately dispatches it is better told why it cannot run than shown a
+        # green tick it should not trust.
         run: |
-          url="${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}"
-          if [ -z "$url" ]; then
-            echo "::warning::No Supabase credentials configured - the RLS suite will skip."
-          else
-            echo "Target: $(echo "$url" | sed -E 's#^https?://([^/]+).*#\1#')"
+          missing=""
+          [ -n "${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}" ] || missing="$missing NEXT_PUBLIC_SUPABASE_URL"
+          [ -n "${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" ] || missing="$missing NEXT_PUBLIC_SUPABASE_ANON_KEY"
+          [ -n "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" ] || missing="$missing SUPABASE_SERVICE_ROLE_KEY"
+
+          if [ -n "$missing" ]; then
+            echo "::error::The RLS suite cannot run. Missing secrets:$missing"
+            exit 1
           fi
+
+          url="${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}"
+          echo "Target: $(echo "$url" | sed -E 's#^https?://([^/]+).*#\1#')"
 
       - name: Policy suite
         run: pnpm test:rls

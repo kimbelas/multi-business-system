@@ -35,13 +35,44 @@ export interface RlsEnv {
   serviceRoleKey: string;
 }
 
-/** Null when the suite has nothing to run against. Callers must skip, not pass. */
+const RLS_VARS = [
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+  "SUPABASE_SERVICE_ROLE_KEY",
+] as const;
+
+/**
+ * Null when the suite has nothing to run against. Callers must skip, not pass.
+ *
+ * **Partial configuration throws instead.** Nobody sets two of these three on purpose, so a
+ * partial set is a mistake in the environment rather than a decision to skip - and the cost of
+ * reading it as a decision was the whole suite:
+ *
+ *   the `rls` CI job had NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY configured
+ *   and SUPABASE_SERVICE_ROLE_KEY absent. The old `!url || !anonKey || !serviceRoleKey` collapsed
+ *   that to the same `null` as a fresh clone, all 36 tests skipped, vitest exited 0, and the job
+ *   went green. The step that exists to catch exactly this printed `Target:
+ *   <project>.supabase.co` and no warning, because it checks the URL alone.
+ *
+ * So the authorization suite for an app whose only authorization layer is RLS reported success
+ * having asserted nothing, on the one project it was pointed at. Three of these are needed and
+ * the difference between "none" and "some" is the difference between a fork with no credentials
+ * and a misconfiguration worth failing over.
+ */
 export function rlsEnv(): RlsEnv | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !anonKey || !serviceRoleKey) return null;
-  return { url, anonKey, serviceRoleKey };
+  const missing = RLS_VARS.filter((name) => !process.env[name]);
+  if (missing.length === RLS_VARS.length) return null;
+  if (missing.length > 0) {
+    throw new Error(
+      `The RLS suite is partially configured, which is never deliberate. Missing: ` +
+        `${missing.join(", ")}. Set all three, or none to skip.`,
+    );
+  }
+  return {
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  };
 }
 
 export const PERSONAS = ["owner", "managerA", "staffA", "staffB", "outsider"] as const;
