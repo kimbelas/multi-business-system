@@ -138,3 +138,41 @@ Secrets it wants, beyond the four the deploy already needs:
 
 - `SUPABASE_SERVICE_ROLE_KEY` — runtime and CI only, never in a build environment
 - `DEPLOYED_URL` — the Worker URL the deployed smoke runs against
+
+## Verifying what is actually deployed
+
+**Ask curl, not a browser.** The Worker serves HTML with
+`cache-control: private, no-cache, no-store, must-revalidate`, but an earlier deploy did not,
+and a response cached before those headers existed is still a response a browser will show. A
+stale tab reported the create-next-app starter page long after the login screen had shipped,
+which sent a diagnosis down the wrong path - including one sentence in the commit that fixed
+the real problem, `3a78e9b`, claiming the deployed build predated the middleware. It did not.
+
+```bash
+U=https://bizdesk.<subdomain>.workers.dev
+curl -s -o /dev/null -w "status=%{http_code} final=%{url_effective}\n" -L "$U/"
+curl -s -L "$U/" | grep -o "<title>[^<]*</title>"
+```
+
+An unauthenticated `/` that ends at `/login?next=%2F` with a `Sign in` title is a build with the
+middleware in it. The starter page has neither.
+
+## Why a deploy has not happened
+
+`deploy.yml` fires on `workflow_run` for CI with a `success` conclusion, so **anything that
+fails CI silently stops the deploy** - and the deploy failing is not what you see. What you see
+is a URL serving an older build, which looks like nothing happened rather than like something
+broke.
+
+That is what happened here: `origin/main` failed `pnpm format:check` on 35 files, the Format
+step runs third in the `check` job, and CI had been red on every push since. Confirmed by
+extracting the pushed tree with `git archive origin/main` and running prettier over it, which is
+the way to check this without waiting for a CI run.
+
+So when a change is missing from the deployed build, in order:
+
+1. `git rev-list --left-right --count origin/main...HEAD` — is it even pushed?
+2. `pnpm typecheck && pnpm lint && pnpm format:check && pnpm test` locally — all four, because
+   CI runs all four and three of them passing is not a green build.
+3. The Actions tab — CI first, then Deploy. A skipped Deploy means CI was not green.
+4. `curl` the URL, per above, rather than trusting a tab.
