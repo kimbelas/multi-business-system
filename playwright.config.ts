@@ -23,6 +23,20 @@ const DEPLOYED = process.env.PLAYWRIGHT_BASE_URL;
 export default defineConfig({
   testDir: "./tests-e2e",
   fullyParallel: true,
+  /*
+   * Pinned, not derived from core count.
+   *
+   * Every worker drives the same `next dev`, so the parallelism is in the browsers and the
+   * bottleneck is one Node process compiling routes on demand. The default is cores/2 - six here -
+   * and at six, three of the theme tests timed out at 30s on their SECOND navigation to the same
+   * page, three runs in a row. Run alone they take three to five seconds each.
+   *
+   * That failure is indistinguishable from a regression until you check, which is the expensive
+   * part: it cost a clean dev-server restart, a cleared build directory and a hunt through a route
+   * restructure before the obvious test - the same tests, one worker - answered it in 46 seconds.
+   * Raise this only with a measurement.
+   */
+  workers: 2,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? "github" : "list",

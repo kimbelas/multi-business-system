@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { Swatch } from "@/components/ui/swatch";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { type BusinessType, businessLabel } from "@/lib/business";
+import { type NavItem } from "@/lib/rbac";
 import { cn } from "@/lib/utils";
 
 /**
@@ -24,9 +25,6 @@ export interface BusinessLink {
   readonly current: boolean;
 }
 
-const NAV = ["Counter", "Dashboard", "Orders", "Clients", "Staff", "Reports", "Settings"] as const;
-export type NavItem = (typeof NAV)[number];
-
 function initials(name: string): string {
   return name
     .split(/\s+/)
@@ -41,6 +39,7 @@ export function AppShell({
   userName,
   businesses,
   branchName,
+  nav,
   active,
   children,
 }: {
@@ -49,7 +48,14 @@ export function AppShell({
   userName: string;
   businesses: readonly BusinessLink[];
   branchName: string;
-  active: NavItem;
+  /** Derived from the role by `navFor`, never listed here - see lib/rbac.ts. */
+  nav: readonly NavItem[];
+  /**
+   * Optional, and absent for now on purpose: none of these screens exist yet, so the items are
+   * labels rather than links and there is nothing to be on. When they are built this becomes a
+   * client component reading `usePathname`, rather than a prop each page remembers to pass.
+   */
+  active?: NavItem;
   children: React.ReactNode;
 }) {
   const current = businesses.find((business) => business.current);
@@ -88,7 +94,7 @@ export function AppShell({
         </div>
 
         <ul className="flex flex-col gap-0.5">
-          {NAV.map((item) => (
+          {nav.map((item) => (
             <li key={item}>
               <span
                 aria-current={item === active ? "page" : undefined}

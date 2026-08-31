@@ -32,7 +32,14 @@
   //
   // The check that does close it is tests/generated-types.test.ts. Read the note there - it cost
   // twelve red CI runs and twelve skipped deploys to find, and two wrong fixes on the way.
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", "**/*.mts"],
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    "**/*.mts",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
   // Keeps tsc from walking a 25 MB server bundle, since the globs above reach into it. This does
   // not affect which globals resolve - see above.
   "exclude": ["node_modules", ".next", ".open-next"]

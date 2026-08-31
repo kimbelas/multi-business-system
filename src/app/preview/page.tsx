@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { CounterScreen } from "@/components/counter/counter-screen";
 import { Dashboard, type BusinessRow, type Tile } from "@/components/dashboard/dashboard";
 import { AppShell, type BusinessLink } from "@/components/shell/app-shell";
+import { navFor } from "@/lib/rbac";
 import { Peso } from "@/components/ui/peso";
 import type { ChartDay } from "@/lib/chart";
 
@@ -130,10 +131,11 @@ export default function PreviewPage() {
         <Banner />
         <AppShell
           orgName="Belas Group"
-          roleLabel="Owner"
+          roleLabel="Staff"
           userName="Ana Reyes"
           businesses={BUSINESSES}
           branchName="Main branch"
+          nav={navFor("staff")}
           active="Counter"
         >
           <CounterScreen businessName="Laundry" branchName="Main branch" recent={<Recent />} />
@@ -148,6 +150,7 @@ export default function PreviewPage() {
           userName="Matt Belas"
           businesses={BUSINESSES}
           branchName="All branches"
+          nav={navFor("owner")}
           active="Dashboard"
         >
           <Dashboard
