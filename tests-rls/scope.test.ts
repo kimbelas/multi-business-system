@@ -43,11 +43,24 @@ describeRls("row level security", () => {
       }
     });
 
-    it("cannot call the scope helpers", async () => {
-      // They read across the whole membership table by design, so execute is revoked from anon.
-      // Without that, the tenancy is enumerable with no login.
-      const { error } = await f.anon.rpc("accessible_branch_ids");
-      expect(error).not.toBeNull();
+    it("learns nothing from the scope helpers", async () => {
+      /*
+       * This used to assert that the call was refused, on the reasoning that these functions read
+       * across the whole membership table and `anon` holding execute would make the tenancy
+       * enumerable without a login.
+       *
+       * Two things were wrong with that. The revoke did not work - `create function` grants
+       * EXECUTE to PUBLIC and revoking from `anon` leaves it - so `anon` could always call them.
+       * And there was nothing to enumerate: every one is scoped by `auth.uid()`, which is null
+       * without a session, so they return nothing to anybody who is not signed in.
+       *
+       * Asserting emptiness rather than refusal is the stronger claim, because it is about what
+       * leaks rather than about who may knock - and it is the claim that has to hold even if
+       * these become reachable some other way.
+       */
+      const { data, error } = await f.anon.rpc("accessible_branch_ids");
+      expect(error?.message ?? null).toBeNull();
+      expect(data).toEqual([]);
     });
 
     it("cannot insert a row anywhere", async () => {
@@ -341,14 +354,17 @@ describeRls("row level security", () => {
   // ---------------------------------------------------------------- function privileges
 
   /*
-   * `create function` grants EXECUTE to PUBLIC, and PUBLIC is a pseudo-role every role carries.
-   * The two earlier migrations revoked from `anon`, which removes a grant made to `anon`
-   * specifically and leaves the PUBLIC one untouched - so the privilege both files say `anon`
-   * does not have, `anon` kept.
+   * `create function` grants EXECUTE to PUBLIC, and PUBLIC is a pseudo-role every role carries,
+   * so the earlier migrations' `revoke ... from anon` removed nothing. The grants are now
+   * explicit: PUBLIC revoked, `authenticated` and `anon` named.
    *
-   * Both halves are asserted, because the fix has a failure mode in each direction: revoke too
-   * little and the tenancy is enumerable without a session, revoke too much and every policy in
-   * the app calls a function the app may not execute.
+   * `anon` is on that list deliberately. These functions leak nothing without a session - each
+   * is scoped by `auth.uid()` - and revoking their execution does not deny an anonymous read, it
+   * only changes it from matching no rows to failing to evaluate, which is how five tables
+   * started answering 42501 instead of `[]`.
+   *
+   * Both roles are asserted, because the failure modes are opposite: too narrow and the policies
+   * cannot be evaluated by the callers they exist for, too broad and the grant means nothing.
    */
   describe("the scope helpers", () => {
     const NO_ARG_HELPERS = [
@@ -360,13 +376,17 @@ describeRls("row level security", () => {
       "member_org_ids",
     ] as const;
 
-    it("cannot be executed without a session", async () => {
+    it("return nothing at all without a session", async () => {
+      // The property that matters. Not "anon is refused" but "anon learns nothing", asserted for
+      // every helper rather than the one the older test sampled.
       for (const fn of NO_ARG_HELPERS) {
-        const { error } = await f.anon.rpc(fn);
-        expect(error, `anon should not be able to execute ${fn}`).not.toBeNull();
+        const { data, error } = await f.anon.rpc(fn);
+        expect(error?.message ?? null, `anon should be able to evaluate ${fn}`).toBeNull();
+        expect(data, `${fn} should return nothing to anon`).toEqual([]);
       }
       const withArg = await f.anon.rpc("role_for_branch", { target_branch: f.branchA });
-      expect(withArg.error, "anon should not be able to execute role_for_branch").not.toBeNull();
+      expect(withArg.error?.message ?? null).toBeNull();
+      expect(withArg.data, "role_for_branch should name no role to anon").toBeNull();
     });
 
     it("can be executed by a signed-in user", async () => {
