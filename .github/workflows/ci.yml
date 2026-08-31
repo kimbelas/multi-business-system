@@ -50,8 +50,16 @@ jobs:
       - name: End-to-end tests
         run: pnpm test:e2e
         env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          # Placeholders when the secrets are absent, and that is not a compromise: this suite
+          # reads no data. It drives /preview, which renders invented figures, and /login, which
+          # is a client form. What it needs is for `createServerClient` in the middleware to get
+          # two non-empty strings - given `undefined` it throws, every request 500s, and the
+          # whole suite fails for a reason that has nothing to do with the code under test.
+          #
+          # Real credentials still win when they are configured. This only stops CI being red on
+          # a fork, or on a repository where nobody has added a secret yet.
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'ci-placeholder-anon-key' }}
 
   bundle:
     # Card #15: the bundle budget is a CI gate, not a habit. The Workers free plan caps a
@@ -74,8 +82,10 @@ jobs:
           # NEXT_PUBLIC_* is inlined into the client bundle at BUILD time, not read at
           # runtime - so these have to be present here, not only as Worker secrets. They are
           # public by design; RLS is what protects the data behind the anon key.
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          # Placeholders when absent: this job measures a size, and the size does not depend
+          # on which project the values point at. The artefact is thrown away, never deployed.
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'ci-placeholder-anon-key' }}
 
       - name: Fail if the Worker exceeds the free-plan budget
         env:

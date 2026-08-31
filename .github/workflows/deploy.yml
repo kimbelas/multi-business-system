@@ -29,6 +29,30 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Refuse to deploy without real credentials
+        # CI falls back to placeholder Supabase values so the suite can run on a fork. A deploy
+        # must not: NEXT_PUBLIC_* is inlined into the client bundle at build time, so a
+        # placeholder here ships a Worker that looks fine and cannot reach the database. Failing
+        # with a message that names the missing secret is the only useful outcome.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          missing=""
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID \
+                      NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY; do
+            eval "value=\$$name"
+            [ -z "$value" ] && missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Cannot deploy - these repository secrets are not set:$missing"
+            echo "Add them under Settings > Secrets and variables > Actions, then re-run."
+            exit 1
+          fi
+          echo "All four deploy secrets are present."
+
       - name: Deploy to Cloudflare Workers
         run: pnpm cf:deploy
         env:
