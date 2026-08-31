@@ -92,6 +92,62 @@ export function can(role: Role, capability: Capability): boolean {
   return grant(role, capability) !== false;
 }
 
+/* ------------------------------------------------------------------ which role, where
+ *
+ * This lived in `lib/scope.ts` and could not be tested, because that module opens with
+ * `import "server-only"` - correct for a module that reads cookies and a session, and fatal for a
+ * rule that is neither. So the rule went unasserted and the shell derived its rail from the highest
+ * role held anywhere, which is the bug card 0004 names.
+ *
+ * It belongs here anyway: this file is where "what a role may do" lives, and "which role applies"
+ * is the same question one step earlier.
+ */
+
+/** Owner beats manager beats staff, so "the role somebody has" is the highest one they hold. */
+const RANK: Record<Role, number> = { staff: 0, manager: 1, owner: 2 };
+
+export function highest(roles: readonly Role[]): Role {
+  return roles.reduce<Role>((best, role) => (RANK[role] > RANK[best] ? role : best), "staff");
+}
+
+/**
+ * One membership row, reduced to the two fields that decide a role.
+ *
+ * `MembershipGrant` rather than `Grant`, which this file already uses for a *capability* grant -
+ * `false | Reach`. Two different things called a grant in one module is how the wrong one gets
+ * imported.
+ */
+export interface MembershipGrant {
+  readonly role: Role;
+  readonly branch_id: string | null;
+}
+
+/**
+ * The role that applies where the person is currently looking.
+ *
+ * The two fallbacks differ on purpose, and that is the whole substance of this function:
+ *
+ *  - **No active branch** - an owner who has not created one yet - means there is no branch context
+ *    to narrow to, so the general role is the right answer. Without this an owner would land on a
+ *    shell with staff navigation and no way to reach the screen that creates a branch.
+ *  - **An active branch with no grant on it** should not be reachable: a non-owner only sees
+ *    branches their own grants name, because that is what RLS returned. If it happens anyway, the
+ *    answer is the *lowest* privilege and not the highest - falling back to "what you are
+ *    elsewhere" is exactly the bug this function was written to remove.
+ */
+export function activeRoleFor(
+  grants: readonly MembershipGrant[],
+  activeBranchId: string | null,
+): Role {
+  // An org-wide owner is an owner at every branch, including ones they also hold a staff row for.
+  if (grants.some((g) => g.role === "owner" && g.branch_id === null)) return "owner";
+
+  if (activeBranchId === null) return highest(grants.map((g) => g.role));
+
+  const here = grants.filter((g) => g.branch_id === activeBranchId).map((g) => g.role);
+  return here.length > 0 ? highest(here) : "staff";
+}
+
 /**
  * The navigation a role can reach, in order.
  *

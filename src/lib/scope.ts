@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
 import { type BusinessType } from "@/lib/business";
-import { type Role } from "@/lib/rbac";
+import { activeRoleFor, highest, type Role } from "@/lib/rbac";
 
 /**
  * Who is signed in, what they can reach, and which branch they are looking at.
@@ -43,8 +43,26 @@ export interface Scope {
   readonly displayName: string;
   readonly orgName: string | null;
   readonly isOwner: boolean;
-  /** The highest role held anywhere, which is what navigation is derived from. */
+  /**
+   * The highest role held anywhere.
+   *
+   * **Not what navigation derives from** - see `activeRole`. This is "what is this person, in
+   * general", which is the right answer for a profile line and the wrong one for deciding which
+   * buttons a screen offers.
+   */
   readonly role: Role;
+  /**
+   * The role at the branch currently selected, which is what navigation derives from.
+   *
+   * A person can hold manager at one branch and staff at another - the membership table is one
+   * grant per row, and the plan calls a manager covering another branch as staff an ordinary
+   * thing. `role` above is the highest of those, so deriving navigation from it offered manager
+   * screens at a branch where the person is staff. RLS refused the queries behind them, so
+   * nothing leaked; what it cost was the thing `lib/rbac.ts` exists to avoid, in its own words:
+   * "a screen offering a button the database will refuse is a worse experience than a screen that
+   * never offered it".
+   */
+  readonly activeRole: Role;
   readonly businesses: readonly BusinessScope[];
   readonly activeBranch: BranchScope | null;
   readonly activeBusiness: BusinessScope | null;
@@ -71,12 +89,14 @@ interface BusinessRow {
   branches: BranchRow[];
 }
 
-/** Owner beats manager beats staff, so "the role somebody has" is the highest one they hold. */
-const RANK: Record<Role, number> = { staff: 0, manager: 1, owner: 2 };
-
-function highest(roles: readonly Role[]): Role {
-  return roles.reduce<Role>((best, role) => (RANK[role] > RANK[best] ? role : best), "staff");
-}
+/*
+ * `activeRoleFor` and `highest` live in `lib/rbac.ts`, not here.
+ *
+ * They are pure rules about roles, and this module opens with `import "server-only"` - so a unit
+ * test importing them through here fails to load at all. That is not a hypothetical: it is why the
+ * rule was never asserted, and why the shell derived its navigation from the highest role held
+ * anywhere until card 0004's third criterion was read carefully.
+ */
 
 /** Null when nobody is signed in. The layout redirects; this does not, so it stays testable. */
 export async function loadScope(): Promise<Scope | null> {
@@ -115,11 +135,9 @@ export async function loadScope(): Promise<Scope | null> {
     ? await supabase.from("organizations").select("name").eq("id", orgId).maybeSingle()
     : { data: null };
 
-  const roleAt = (branchId: string): Role => {
-    if (isOwner) return "owner";
-    const held = memberships.filter((m) => m.branch_id === branchId).map((m) => m.role);
-    return highest(held);
-  };
+  // One rule, one implementation. This was a separate closure that happened to agree with
+  // `activeRoleFor`; two copies of a permission rule is one copy too many.
+  const roleAt = (branchId: string): Role => activeRoleFor(memberships, branchId);
 
   const businesses: BusinessScope[] = ((businessRows ?? []) as BusinessRow[]).map((business) => ({
     id: business.id,
@@ -153,6 +171,7 @@ export async function loadScope(): Promise<Scope | null> {
     orgName: org?.name ?? null,
     isOwner,
     role: isOwner ? "owner" : highest(memberships.map((m) => m.role)),
+    activeRole: activeRoleFor(memberships, chosen?.branch.id ?? null),
     businesses,
     activeBranch: chosen?.branch ?? null,
     activeBusiness: chosen?.business ?? null,
