@@ -25,19 +25,7 @@ export interface KeypadState {
 export const EMPTY: KeypadState = { raw: "" };
 
 export type KeypadKey =
-  | "0"
-  | "1"
-  | "2"
-  | "3"
-  | "4"
-  | "5"
-  | "6"
-  | "7"
-  | "8"
-  | "9"
-  | "."
-  | "backspace"
-  | "clear";
+  "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "." | "backspace" | "clear";
 
 /** Every key a physical keyboard can send, mapped to a keypad key. Desktop rule 5. */
 export function keyFromKeyboard(key: string): KeypadKey | null {

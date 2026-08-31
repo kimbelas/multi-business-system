@@ -139,7 +139,11 @@ if (process.argv.includes("--candidates")) {
   };
   for (const [name, entries] of Object.entries(CANDIDATES)) {
     const dark = name.toLowerCase().includes("dark");
-    report(`${name}  — on the ${dark ? "dark" : "light"} ground`, entries, dark ? DARK_GROUND : LIGHT_GROUND);
+    report(
+      `${name}  — on the ${dark ? "dark" : "light"} ground`,
+      entries,
+      dark ? DARK_GROUND : LIGHT_GROUND,
+    );
   }
 } else {
   const css = fs

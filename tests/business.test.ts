@@ -2,7 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { BUSINESS, BUSINESS_TYPES, UNATTRIBUTED_COLOR, businessColor, businessLabel } from "@/lib/business";
+import {
+  BUSINESS,
+  BUSINESS_TYPES,
+  UNATTRIBUTED_COLOR,
+  businessColor,
+  businessLabel,
+} from "@/lib/business";
 
 /**
  * The registry has to agree with the database, and nothing else makes it.
@@ -26,7 +32,9 @@ function enumValues(name: string): string[] {
     .map((file) => fs.readFileSync(path.join(MIGRATIONS, file), "utf8"))
     .join("\n");
 
-  const match = new RegExp(`create type (?:public\\.)?${name} as enum \\(([^)]*)\\)`, "i").exec(sql);
+  const match = new RegExp(`create type (?:public\\.)?${name} as enum \\(([^)]*)\\)`, "i").exec(
+    sql,
+  );
   if (match === null) return [];
   return [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
 }

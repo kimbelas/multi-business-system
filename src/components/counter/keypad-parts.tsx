@@ -20,13 +20,7 @@ const METHOD_LABEL: Record<PaymentMethod, string> = {
   maya: "Maya",
 };
 
-export function AmountDisplay({
-  state,
-  className,
-}: {
-  state: KeypadState;
-  className?: string;
-}) {
+export function AmountDisplay({ state, className }: { state: KeypadState; className?: string }) {
   const { whole, fraction } = display(state);
   return (
     <output
@@ -65,9 +59,9 @@ export function MethodPills({
             className={cn(
               "h-pill flex-1 rounded-full text-[15px] transition-colors",
               selected
-                // The accent hue at 28% lightness. Dark enough to read as ink, related
-                // enough that the pad and Record sale look like one control group.
-                ? "bg-commit-deep font-semibold text-white"
+                ? // The accent hue at 28% lightness. Dark enough to read as ink, related
+                  // enough that the pad and Record sale look like one control group.
+                  "bg-commit-deep font-semibold text-white"
                 : "border border-border bg-card text-foreground/70 hover:bg-muted",
             )}
           >

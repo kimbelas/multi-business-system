@@ -15,7 +15,10 @@
     "test:e2e": "playwright test",
     "cf:build": "opennextjs-cloudflare build",
     "cf:preview": "opennextjs-cloudflare preview",
-    "cf:deploy": "opennextjs-cloudflare deploy"
+    "cf:deploy": "opennextjs-cloudflare deploy",
+    "test:rls": "vitest run --config vitest.rls.config.ts",
+    "test:e2e:deployed": "playwright test deployed.spec.ts",
+    "palette": "node --experimental-strip-types scripts/palette-check.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

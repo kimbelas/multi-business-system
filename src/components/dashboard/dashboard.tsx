@@ -156,7 +156,10 @@ export function Dashboard({
             {subtitle}
           </p>
         </div>
-        <Peso amount={total} className="hidden text-[2.125rem] font-semibold sm:block lg:text-4xl" />
+        <Peso
+          amount={total}
+          className="hidden text-[2.125rem] font-semibold sm:block lg:text-4xl"
+        />
       </header>
 
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3 lg:gap-3.5">

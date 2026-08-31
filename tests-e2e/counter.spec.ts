@@ -21,6 +21,16 @@ const WIDTHS = [
 
 const screen = '[data-testid="counter-screen"]';
 
+/*
+ * Everything in this file drives /preview, which 404s outside development on purpose. Against a
+ * deployed target these skip rather than fail: a red suite for the correct reason teaches
+ * nobody anything, and `deployed.spec.ts` is the file that asserts the preview is gone.
+ */
+test.skip(
+  !!process.env.PLAYWRIGHT_BASE_URL,
+  "drives /preview, which is development-only - see deployed.spec.ts",
+);
+
 for (const { name, width, height } of WIDTHS) {
   test.describe(`${name} ${width}x${height}`, () => {
     test.use({ viewport: { width, height } });
@@ -123,12 +133,14 @@ test.describe("graphs", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/preview");
 
-    const segments = page.locator('[data-testid="dashboard"] section:has-text("This week") div[style*="--biz-"]');
+    const segments = page.locator(
+      '[data-testid="dashboard"] section:has-text("This week") div[style*="--biz-"]',
+    );
     // Seven days, three businesses each. A single-series chart would have seven.
     await expect(segments).toHaveCount(21);
 
-    const colours = await segments.evaluateAll((nodes) =>
-      [...new Set(nodes.map((n) => getComputedStyle(n).backgroundColor))].length,
+    const colours = await segments.evaluateAll(
+      (nodes) => [...new Set(nodes.map((n) => getComputedStyle(n).backgroundColor))].length,
     );
     // Three resolved colours, not one. This is what fails if the chart scale is quietly
     // returned to shadcn's five greys.

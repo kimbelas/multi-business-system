@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { EMPTY, type KeypadKey, display, isCommittable, keyFromKeyboard, press, toPesos } from "@/lib/keypad";
+import {
+  EMPTY,
+  type KeypadKey,
+  display,
+  isCommittable,
+  keyFromKeyboard,
+  press,
+  toPesos,
+} from "@/lib/keypad";
 
 /** Tap a sequence, the way a person does. */
 function tap(...keys: KeypadKey[]) {

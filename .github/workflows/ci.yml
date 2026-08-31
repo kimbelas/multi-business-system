@@ -7,6 +7,11 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The rls and deployed jobs write to a real project and assert against a real deployment, so
+  # they are opt-in: run them from the Actions tab, or let the weekly schedule catch drift.
+  workflow_dispatch:
+  schedule:
+    - cron: "0 17 * * 1" # Monday 01:00 Asia/Manila
 
 concurrency:
   # A second push supersedes the first: an in-flight run of an older commit tells you nothing.
@@ -98,3 +103,75 @@ jobs:
               print "::warning::Over 75%% of the Worker budget is used"
             }
           }'
+
+  rls:
+    # The five-persona policy suite, against a real Supabase project.
+    #
+    # Deliberately NOT on every push. It creates and deletes real auth users and a real
+    # organization, and a suite that writes to the project on every commit is a suite somebody
+    # eventually points at production by accident. So: run it by hand from the Actions tab, or
+    # on a schedule, and never as a side effect of pushing a README change.
+    #
+    # It also skips itself rather than failing when the secrets are absent, which is what makes
+    # a fork of this repo able to run CI at all.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Say which project this is about to write to
+        # The host only, never the key. Pointing this at the wrong project is the one mistake
+        # that matters here, and a log line naming it is the cheapest guard against it.
+        run: |
+          url="${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}"
+          if [ -z "$url" ]; then
+            echo "::warning::No Supabase credentials configured - the RLS suite will skip."
+          else
+            echo "Target: $(echo "$url" | sed -E 's#^https?://([^/]+).*#\1#')"
+          fi
+
+      - name: Policy suite
+        run: pnpm test:rls
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+  deployed:
+    # The deployed build as the testing ground: the guards that only mean anything once the app
+    # is somewhere anyone can reach. What it checks is in tests-e2e/deployed.spec.ts - the
+    # middleware gate holds, no signup exists, and the design preview is gone.
+    #
+    # Same reasoning as above on when it runs: there is no point asserting against a deployment
+    # that a push has not produced yet, so this is by hand or on a schedule, after a deploy.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - name: Deployed smoke
+        # Absent URL means nothing to test rather than something broken, so this is a skip with
+        # a warning and not a red run.
+        run: |
+          if [ -z "${{ secrets.DEPLOYED_URL }}" ]; then
+            echo "::warning::No DEPLOYED_URL secret - nothing to test against."
+            exit 0
+          fi
+          pnpm test:e2e:deployed
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ secrets.DEPLOYED_URL }}

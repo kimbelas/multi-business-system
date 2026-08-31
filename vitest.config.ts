@@ -16,6 +16,8 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     include: ["src/**/*.test.{ts,tsx}", "tests/**/*.test.{ts,tsx}"],
-    exclude: ["node_modules/**", ".next/**", ".open-next/**", "tests-e2e/**"],
+    // `tests-rls` needs network, credentials and write access to a real project, so it is
+    // `pnpm test:rls` and its own config. `pnpm test` stays hermetic.
+    exclude: ["node_modules/**", ".next/**", ".open-next/**", "tests-e2e/**", "tests-rls/**"],
   },
 });

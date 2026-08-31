@@ -59,7 +59,10 @@ describe("sharePercents", () => {
     for (let i = 0; i < 200; i += 1) {
       const values = [0, 1, 2].map(() => Math.floor(Math.random() * 10_000) + 1);
       const shares = sharePercents(values);
-      expect(shares.reduce((a, b) => a + b, 0), values.join("/")).toBe(100);
+      expect(
+        shares.reduce((a, b) => a + b, 0),
+        values.join("/"),
+      ).toBe(100);
     }
   });
 

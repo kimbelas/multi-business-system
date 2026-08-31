@@ -52,9 +52,30 @@ const WEEK: ChartDay[] = [
 }));
 
 const ROWS: BusinessRow[] = [
-  { type: "laundry", value: 5120, amount: "5,120.00", transactions: 18, variance: "0.00", closed: true },
-  { type: "spa", value: 4300, amount: "4,300.00", transactions: 12, variance: "-40.00", closed: true },
-  { type: "skincare", value: 3060, amount: "3,060.00", transactions: 11, variance: null, closed: false },
+  {
+    type: "laundry",
+    value: 5120,
+    amount: "5,120.00",
+    transactions: 18,
+    variance: "0.00",
+    closed: true,
+  },
+  {
+    type: "spa",
+    value: 4300,
+    amount: "4,300.00",
+    transactions: 12,
+    variance: "-40.00",
+    closed: true,
+  },
+  {
+    type: "skincare",
+    value: 3060,
+    amount: "3,060.00",
+    transactions: 11,
+    variance: null,
+    closed: false,
+  },
 ];
 
 const RECENT = [

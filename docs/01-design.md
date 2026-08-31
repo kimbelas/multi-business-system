@@ -5,17 +5,17 @@ The chosen direction, picked from ten. Canvas:
 the owner dashboard drawn at 390, 834 and 1440, plus the rules below as an artboard. The ten
 directions it was chosen from: <https://claude.ai/code/artifact/4ac1e7f5-0d12-4706-9d8a-1146a65e6f19>.
 
-It is two halves of two directions. The **sale screen** is *Counter First*: a keypad, three
+It is two halves of two directions. The **sale screen** is _Counter First_: a keypad, three
 payment pills, one large committing button, and nothing else on screen. The **dashboard** is
-*Owner First*: four stat tiles, a week trend with today filled in, the three businesses, and
+_Owner First_: four stat tiles, a week trend with today filled in, the three businesses, and
 the un-closed branch called out in red.
 
 Where the two disagreed — page background, card border, radius — Counter First's values win,
 because the counter is the screen staff look at all day and the dashboard is the screen the
 owner glances at.
 
-Eight directions were rejected. Two of them are worth remembering: *Big Button Utility*
-proved the four-tap rule does not require shouting, and *Owner First*'s own sale screen — a
+Eight directions were rejected. Two of them are worth remembering: _Big Button Utility_
+proved the four-tap rule does not require shouting, and _Owner First_'s own sale screen — a
 four-field form — is what this direction refuses. It was drawn deliberately so the tradeoff
 was on the table rather than assumed away.
 
@@ -26,7 +26,7 @@ mode of mobile-first is a phone layout stretched across a desktop. The first six
 on tablet and desktop" means here.
 
 1. **The keypad is capped, never stretched.** 380–420px at every width (`--pad-max`). Extra
-   room becomes context, not bigger keys — a 700px numpad is *slower* than a 380px one,
+   room becomes context, not bigger keys — a 700px numpad is _slower_ than a 380px one,
    because the thumb travels further between digits. This is the rule the whole responsive
    design turns on, and it is the one guarded by a test.
 
@@ -54,7 +54,7 @@ on tablet and desktop" means here.
 7. **Colour identifies a business and nothing else.** A hue means the same business wherever
    you meet it — a bar segment, the share bar, a table row, the rail square. Past days in the
    week chart are the same hues dimmed rather than a fourth colour, because the week is context
-   and today is the subject; *how far* they dim is a token, not a number, because fading toward
+   and today is the subject; _how far_ they dim is a token, not a number, because fading toward
    near-black desaturates as well as darkens and dark needs to fade less. Nothing else on screen
    carries a hue except the accent on Record sale and the red on a branch that did not close.
 
@@ -68,11 +68,11 @@ on tablet and desktop" means here.
 
 Two, both Tailwind defaults. Adding a third is adding a layout somebody has to keep working.
 
-| | Width | Arrangement |
-|---|---|---|
-| base | < 640 | One column. Branch on one line, keypad full width, commit at the bottom. |
-| `sm` | ≥ 640 | Top bar appears with the branch switcher. Composer and keypad side by side. |
-| `lg` | ≥ 1024 | Left rail appears. Recent sales become a third column; tiles go 4 across. |
+|      | Width  | Arrangement                                                                 |
+| ---- | ------ | --------------------------------------------------------------------------- |
+| base | < 640  | One column. Branch on one line, keypad full width, commit at the bottom.    |
+| `sm` | ≥ 640  | Top bar appears with the branch switcher. Composer and keypad side by side. |
+| `lg` | ≥ 1024 | Left rail appears. Recent sales become a third column; tiles go 4 across.   |
 
 ## Colour
 
@@ -81,14 +81,14 @@ deliberately colourless theme. Everything below is what was added to it, and it 
 appended block at the foot of `src/app/globals.css` rather than merged into the generated one,
 because `shadcn init` and some `shadcn add` runs rewrite that block.
 
-| Token | Value | Job |
-|---|---|---|
-| `--background` | `#fafafa` | The page ground. shadcn ships this pure white, which leaves a 1px border doing all the work of separating page from card. |
-| `--card` | `#ffffff` | The raised surface. 14px radius. |
-| `--commit` | `#148b92` | Hue 202, chroma 0.095. **Two places, both enumerable:** the Record sale button, and the ring around the rail dot for the business you are currently in. The dot itself is that business's chart hue — the accent answers "which one am I in", the hue answers "which one is this". Nowhere else: not a link, not a chart series, not the focus ring. |
-| `--commit-deep` | `#10322f` | The chosen payment pill. The accent hue at 28% lightness: dark enough to read as ink, related enough that the pad and the commit button look like one control group. Its only other appearance. |
-| `--good` / `--warn` | `#16a34a` / `#ca8a04` | Direction on a number, in tile subtitles. Never a surface, never a fill. |
-| `--destructive-surface` / `-border` / `-strong` | `#fef2f2` / `#fecaca` / `#991b1b` | shadcn has one destructive colour; the un-closed-branch card needs three. |
+| Token                                           | Value                             | Job                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--background`                                  | `#fafafa`                         | The page ground. shadcn ships this pure white, which leaves a 1px border doing all the work of separating page from card.                                                                                                                                                                                                                            |
+| `--card`                                        | `#ffffff`                         | The raised surface. 14px radius.                                                                                                                                                                                                                                                                                                                     |
+| `--commit`                                      | `#148b92`                         | Hue 202, chroma 0.095. **Two places, both enumerable:** the Record sale button, and the ring around the rail dot for the business you are currently in. The dot itself is that business's chart hue — the accent answers "which one am I in", the hue answers "which one is this". Nowhere else: not a link, not a chart series, not the focus ring. |
+| `--commit-deep`                                 | `#10322f`                         | The chosen payment pill. The accent hue at 28% lightness: dark enough to read as ink, related enough that the pad and the commit button look like one control group. Its only other appearance.                                                                                                                                                      |
+| `--good` / `--warn`                             | `#16a34a` / `#ca8a04`             | Direction on a number, in tile subtitles. Never a surface, never a fill.                                                                                                                                                                                                                                                                             |
+| `--destructive-surface` / `-border` / `-strong` | `#fef2f2` / `#fecaca` / `#991b1b` | shadcn has one destructive colour; the un-closed-branch card needs three.                                                                                                                                                                                                                                                                            |
 
 **No indigo, violet or purple — hue 255 to 320.** That is the family every generated
 interface reaches for, and the theme shipped with exactly one chromatic value in it: a violet
@@ -120,18 +120,18 @@ published for colour vision deficiency.
 The first set here was cyan / pink / amber, picked because it looked good. `palette-check`
 found that under tritanopia its pink and amber separated by an OKLab distance of **0.009**: for
 those readers, two of the three series in the app were the same colour. Nothing on screen said
-so and no test failed. Softening the chroma made every pair *worse*, because the problem was
+so and no test failed. Softening the chroma made every pair _worse_, because the problem was
 hue choice and not saturation.
 
 Of every trio measured, this is the only one where all three clear 3:1 against both grounds,
 and it ties the best worst-case separation available:
 
-| | Business | Light | Dark | Contrast (light) |
-|---|---|---|---|---|
-| `--biz-laundry` | Laundry | `#0172b2` | `#56a6e3` | 4.96:1 |
-| `--biz-spa` | Spa | `#099e73` | `#55d1a3` | 3.28:1 |
-| `--biz-skincare` | Skin Care | `#d55e01` | `#f68a50` | 3.71:1 |
-| `--biz-none` | Unattributed | `#737373` | `#808080` | 4.53:1 |
+|                  | Business     | Light     | Dark      | Contrast (light) |
+| ---------------- | ------------ | --------- | --------- | ---------------- |
+| `--biz-laundry`  | Laundry      | `#0172b2` | `#56a6e3` | 4.96:1           |
+| `--biz-spa`      | Spa          | `#099e73` | `#55d1a3` | 3.28:1           |
+| `--biz-skincare` | Skin Care    | `#d55e01` | `#f68a50` | 3.71:1           |
+| `--biz-none`     | Unattributed | `#737373` | `#808080` | 4.53:1           |
 
 Worst-case pairwise separation, across normal vision and all three dichromacies: **0.090** in
 both themes, against a floor of 0.08. The pair that sets it is laundry/spa under tritanopia.
@@ -185,17 +185,18 @@ both.
   and darkens at once, and at 0.45 the vermillion arrived as brown. Light 0.45, dark 0.6.
 
 ## Sizing
+
 ## Sizing
 
-| | Value | |
-|---|---|---|
-| Numpad key | 62px mobile and tablet, 58px desktop | 12px radius |
-| Method pill | 46px | 999px radius |
-| Record sale | 60px | 14px radius, accent fill |
-| Card radius | 14px | 16px on the desktop composer shell |
-| Type floor | 11.5px | timestamps and tile subtitles only |
-| Body | 13.5–15px | labels 12–12.5px |
-| Figures | mono, 17–52px | 600 weight, `-.02em` at display sizes |
+|             | Value                                |                                       |
+| ----------- | ------------------------------------ | ------------------------------------- |
+| Numpad key  | 62px mobile and tablet, 58px desktop | 12px radius                           |
+| Method pill | 46px                                 | 999px radius                          |
+| Record sale | 60px                                 | 14px radius, accent fill              |
+| Card radius | 14px                                 | 16px on the desktop composer shell    |
+| Type floor  | 11.5px                               | timestamps and tile subtitles only    |
+| Body        | 13.5–15px                            | labels 12–12.5px                      |
+| Figures     | mono, 17–52px                        | 600 weight, `-.02em` at display sizes |
 
 The floors are exposed as Tailwind utilities — `h-key`, `h-pill`, `h-commit`, `max-w-pad` —
 so a violation shows up in the markup instead of being a number somebody was supposed to
