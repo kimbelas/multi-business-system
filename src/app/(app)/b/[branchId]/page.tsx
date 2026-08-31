@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { AppearanceRow } from "@/components/ui/appearance-row";
 import { Swatch } from "@/components/ui/swatch";
 import { businessLabel } from "@/lib/business";
 import { NAV_CAPABILITY, type NavItem, can } from "@/lib/rbac";
@@ -64,8 +65,9 @@ export default async function BranchHome({ params }: { params: Promise<{ branchI
           ))}
         </ul>
         <p className="mt-3 text-xs text-muted-foreground">
-          From the section 7 matrix, for your role here. The rail shows the same for the highest
-          role you hold anywhere; this list is this branch.
+          From the section 7 matrix, for your role here. The rail is derived from the same role, so
+          the two agree - it used to show the highest role you hold anywhere, which offered manager
+          screens at a branch where you are staff.
         </p>
       </section>
 
@@ -84,6 +86,8 @@ export default async function BranchHome({ params }: { params: Promise<{ branchI
           All branches
         </Link>
       </p>
+
+      <AppearanceRow className="mt-8" />
     </main>
   );
 }

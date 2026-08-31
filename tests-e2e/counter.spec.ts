@@ -177,16 +177,34 @@ test.describe("theme", () => {
    * to be true for a second theme to be real rather than declared.
    */
 
-  test("follows the operating system on a first visit", async ({ page }) => {
-    // No stored preference, so the inline script in layout.tsx has to fall back to the OS
-    // rather than to light. A phone in dark mode should not get a white flash and stay white.
+  test("opens light on a first visit, whatever the operating system says", async ({ page }) => {
+    /*
+     * This asserted the opposite until the owner asked for light. The inline script used to fall
+     * back to `prefers-color-scheme` with nothing stored, so a dark-mode device opened dark.
+     *
+     * The dark case is the one worth keeping in the test rather than deleting: a device set to
+     * dark is exactly where the old behaviour would come back unnoticed, because everything would
+     * look deliberate.
+     */
     await page.emulateMedia({ colorScheme: "dark" });
     await page.goto("/preview");
-    await expect(page.locator("html")).toHaveClass(/dark/);
+    await expect(page.locator("html")).not.toHaveClass(/dark/);
 
     await page.emulateMedia({ colorScheme: "light" });
     await page.goto("/preview");
     await expect(page.locator("html")).not.toHaveClass(/dark/);
+  });
+
+  test("still opens dark for someone who chose dark", async ({ page }) => {
+    // The other half of the default. Light-by-default must not become light-only: an explicit
+    // choice has to survive, and a stored "dark" is the only thing that turns it on now.
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.goto("/preview");
+    await page.evaluate(() => localStorage.setItem("theme", "dark"));
+    await page.reload();
+    await expect(page.locator("html")).toHaveClass(/dark/);
+
+    await page.evaluate(() => localStorage.removeItem("theme"));
   });
 
   test("changes nothing about the layout", async ({ page }) => {

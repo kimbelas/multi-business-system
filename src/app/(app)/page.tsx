@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { AppearanceRow } from "@/components/ui/appearance-row";
 import { Swatch } from "@/components/ui/swatch";
 import { businessLabel } from "@/lib/business";
 import { loadScope } from "@/lib/scope";
@@ -109,6 +110,8 @@ export default async function HomePage() {
           </span>
         </p>
       )}
+
+      <AppearanceRow className="mt-10" />
 
       <p className="mt-10 text-xs text-muted-foreground">
         Everything above was read with the anon key through row level security. Nothing on this page

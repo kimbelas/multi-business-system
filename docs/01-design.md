@@ -168,10 +168,15 @@ One theme, two modes, named **Counter**, defined in a single block at the foot o
 exists in one mode and not the other, and `tests/palette.test.ts` runs the same floors against
 both.
 
-- **Dark is chosen before the first paint.** A blocking inline script in `layout.tsx` reads
-  `localStorage` and falls back to `prefers-color-scheme`, so a dark-mode reload does not flash
-  white. Doing that work in an effect is what causes the flash, and there is no way around the
-  inline script. It is a string literal with no interpolation.
+- **Light is the default, and the operating system is not consulted.** A blocking inline script
+  in `layout.tsx` reads `localStorage` and turns dark on only for an explicit `"dark"`. It used
+  to fall back to `prefers-color-scheme`, so a dark-mode device opened dark without anybody
+  choosing — conventional, and rejected here: the owner asked for light, and this is a tool used
+  in daylight at a counter rather than an app read in bed. A stored choice still wins in both
+  directions.
+- **Dark is still chosen before the first paint.** The script has to be blocking and inline;
+  doing that work in an effect is what causes the white flash on a dark reload, and there is no
+  way around it. It is a string literal with no interpolation.
 - **`ThemeToggle` holds no React state.** The obvious version keeps the current mode in
   `useState` and renders the matching icon, which mismatches on hydration every time — the
   server cannot know what the browser chose. Both icons are in the markup and CSS picks:

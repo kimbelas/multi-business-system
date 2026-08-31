@@ -26,10 +26,16 @@ export const metadata: Metadata = {
  * literal in this file - no interpolation, nothing from a request - so there is nothing here for
  * anyone to inject into.
  *
- * `null` falls back to the operating system rather than to light, so a phone in dark mode gets
- * dark on the first visit without anybody choosing.
+ * **Light is the default, and the operating system is not consulted.** It used to fall back to
+ * `prefers-color-scheme` when nothing was stored, so a dark-mode device opened dark without
+ * anybody choosing. That is the conventional behaviour and it was rejected here: the owner asked
+ * for light, and this is a tool used in daylight at a counter rather than an app read in bed.
+ *
+ * Only an explicit `"dark"` - which nothing writes but `ThemeToggle` - turns dark on. So the
+ * one-way door is closed: a person who has never touched the toggle always gets light, and a
+ * person who has always gets what they picked.
  */
-const THEME_SCRIPT = `try{var t=localStorage.getItem("theme");if(t==="dark"||(t===null&&window.matchMedia("(prefers-color-scheme: dark)").matches)){document.documentElement.classList.add("dark")}}catch(e){}`;
+const THEME_SCRIPT = `try{if(localStorage.getItem("theme")==="dark"){document.documentElement.classList.add("dark")}}catch(e){}`;
 
 /*
  * Typed by hand, not with Next's generated `LayoutProps<"/">`.
