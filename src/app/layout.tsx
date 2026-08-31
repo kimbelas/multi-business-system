@@ -31,7 +31,16 @@ export const metadata: Metadata = {
  */
 const THEME_SCRIPT = `try{var t=localStorage.getItem("theme");if(t==="dark"||(t===null&&window.matchMedia("(prefers-color-scheme: dark)").matches)){document.documentElement.classList.add("dark")}}catch(e){}`;
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+/*
+ * Typed by hand, not with Next's generated `LayoutProps<"/">`.
+ *
+ * That type is emitted into `.next/types/` by a build. It resolves on a machine that has run
+ * `next dev` and does not exist in a fresh checkout, so `pnpm typecheck` passed locally and
+ * failed in CI with `TS2304: Cannot find name 'LayoutProps'` - on every push since the
+ * scaffold. Twelve red runs, and because deploy.yml only fires on a green CI, twelve skipped
+ * deploys. The generated types are convenient and they are not part of the program.
+ */
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     /*
      * `suppressHydrationWarning` because the script above adds a class the server did not

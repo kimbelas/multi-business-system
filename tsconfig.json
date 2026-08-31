@@ -22,13 +22,18 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "**/*.mts"
-  ],
-  "exclude": ["node_modules"]
+  // Build output is not listed here, and excluding it below is hygiene rather than a fix.
+  //
+  // What makes `pnpm typecheck` disagree with CI is neither of those. `next-env.d.ts` is
+  // generated, gitignored, and imports `.next/dev/types/routes.d.ts`, which declares LayoutProps
+  // and PageProps as globals. An explicit import pulls a file into the program regardless of
+  // include or exclude, so no setting in this file can close that gap: locally the file exists,
+  // in a fresh checkout it was never generated.
+  //
+  // The check that does close it is tests/generated-types.test.ts. Read the note there - it cost
+  // twelve red CI runs and twelve skipped deploys to find, and two wrong fixes on the way.
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", "**/*.mts"],
+  // Keeps tsc from walking a 25 MB server bundle, since the globs above reach into it. This does
+  // not affect which globals resolve - see above.
+  "exclude": ["node_modules", ".next", ".open-next"]
 }
