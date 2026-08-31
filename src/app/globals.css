@@ -109,8 +109,8 @@
   --chart-5: oklch(0.269 0 0);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.922 0 0);
+  --sidebar-primary-foreground: oklch(0.205 0 0);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
@@ -127,4 +127,87 @@
   html {
     @apply font-sans;
   }
+}
+
+/* ---------------------------------------------------------------- Counter First
+ *
+ * The chosen design direction, appended rather than merged into the block above.
+ * That block is generated: `npx shadcn init` and some `shadcn add` runs rewrite it,
+ * and a design decision living inside generated output is a design decision that
+ * disappears without a diff anyone reads. Everything here overrides by cascade,
+ * which is also why the dark values restate --background: `.dark` above and `:root`
+ * here have equal specificity, so source order is the only thing deciding.
+ *
+ * Canvas: https://claude.ai/code/artifact/1936383a-efff-42ad-99aa-6f61517e613d
+ * Rules:  docs/01-design.md
+ */
+
+:root {
+  /* The page is a ground and the card is raised. shadcn ships both pure white,
+   * which leaves a 1px border doing all the work of separating them. */
+  --background: oklch(0.985 0 0);                    /* #fafafa */
+
+  /* Two places, both enumerable: the Record sale button, and the dot marking which
+   * business you are looking at. Nowhere else - not a link, not a focus ring, not a
+   * chart series. teal-600. */
+  --commit: oklch(0.6 0.118 184.704);                /* #0d9488 */
+  --commit-foreground: oklch(1 0 0);
+
+  /* The accent hue at 28% lightness: dark enough to read as ink, related enough
+   * that the keypad and the Record sale button look like one control group. This
+   * is the accent hue only other appearance and it takes no other job. */
+  --commit-deep: oklch(0.277 0.046 192.524);         /* #042f2e */
+
+  /* Direction on a number, in tile subtitles. Never a surface, never a fill. */
+  --good: oklch(0.627 0.194 149.214);                /* #16a34a */
+  --warn: oklch(0.681 0.162 75.834);                 /* #ca8a04 */
+
+  /* shadcn has one destructive colour; the un-closed-branch card needs three. */
+  --destructive-surface: oklch(0.971 0.013 17.38);   /* #fef2f2 */
+  --destructive-border: oklch(0.885 0.062 18.334);   /* #fecaca */
+  --destructive-strong: oklch(0.444 0.177 26.899);   /* #991b1b */
+
+  /* Floors, not defaults: nothing shrinks on a bigger screen. The keypad cap is
+   * the whole responsive idea - extra width buys context, not bigger keys. */
+  --key-h: 62px;
+  --pill-h: 46px;
+  --commit-h: 60px;
+  --pad-max: 420px;
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --commit: oklch(0.704 0.14 182.503);
+  --commit-foreground: oklch(0.145 0 0);
+  --commit-deep: oklch(0.386 0.063 188.416);
+  --good: oklch(0.723 0.19 149.579);
+  --warn: oklch(0.795 0.184 86.047);
+  --destructive-surface: oklch(0.258 0.092 26.042);
+  --destructive-border: oklch(0.396 0.141 25.723);
+  --destructive-strong: oklch(0.808 0.114 19.571);
+
+  /* --sidebar-primary was a violet - oklch lightness .488, chroma .243, hue 264 - and the
+   * only chromatic value in an otherwise chroma-0 theme. A shadcn default nobody chose. It
+   * is corrected in the generated block above rather than shadowed here, because a wrong
+   * value left in the file is a wrong value somebody greps for and believes. The guard
+   * against a shadcn regeneration bringing it back is tests/design-tokens.test.ts. */
+}
+
+@theme inline {
+  --color-commit: var(--commit);
+  --color-commit-foreground: var(--commit-foreground);
+  --color-commit-deep: var(--commit-deep);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-destructive-surface: var(--destructive-surface);
+  --color-destructive-border: var(--destructive-border);
+  --color-destructive-strong: var(--destructive-strong);
+
+  /* So the floors are reachable as utilities - h-key, min-h-pill, h-commit,
+   * max-w-pad - and a violation shows up in the markup instead of being a number
+   * somebody was supposed to remember. */
+  --spacing-key: var(--key-h);
+  --spacing-pill: var(--pill-h);
+  --spacing-commit: var(--commit-h);
+  --container-pad: var(--pad-max);
 }

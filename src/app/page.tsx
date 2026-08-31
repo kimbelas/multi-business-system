@@ -101,7 +101,7 @@ export default async function HomePage() {
                   <span
                     aria-hidden="true"
                     className={`size-1.5 rounded-full ${
-                      branch.is_active ? "bg-emerald-500" : "bg-muted-foreground"
+                      branch.is_active ? "bg-commit" : "bg-muted-foreground"
                     }`}
                   />
                   {branch.name}
