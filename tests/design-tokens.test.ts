@@ -16,7 +16,17 @@ import { describe, expect, it } from "vitest";
  * explains it.
  */
 
-const CSS = fs.readFileSync(path.join(process.cwd(), "src/app/globals.css"), "utf8");
+const SOURCE = fs.readFileSync(path.join(process.cwd(), "src/app/globals.css"), "utf8");
+
+/**
+ * Comments stripped, because these tests are about declarations and not about prose.
+ *
+ * Both of the bugs below are explained in comments that necessarily quote the wrong value -
+ * "was oklch(... 264.376)", "was --font-sans: var(--font-sans)" - and a scanner that reads
+ * those flags the explanation as the offence. The first version of this file dodged that by
+ * rewording the comments, which is the tail wagging the dog: the fix is to scan CSS.
+ */
+const CSS = SOURCE.replace(/\/\*[\s\S]*?\*\//g, "");
 
 /** Every `oklch(L C H ...)` in the file, with its numbers parsed. */
 function oklchValues(): { raw: string; l: number; c: number; h: number }[] {
@@ -105,6 +115,33 @@ describe("sizing", () => {
     // somebody has to remember, and remembering is what the canvas already failed at once.
     for (const t of ["--spacing-key", "--spacing-pill", "--spacing-commit", "--container-pad"]) {
       expect(CSS).toContain(t);
+    }
+  });
+});
+
+describe("theme wiring", () => {
+  /**
+   * The font bug was worse than the violet, because it was invisible as a mistake.
+   *
+   * `--font-sans: var(--font-sans)` refers to itself, so `font-sans` compiled to a
+   * `font-family` naming a custom property with no definition anywhere. `html { @apply
+   * font-sans }` fell through to the browser default and every heading rendered in Times.
+   * Nothing errored, no build failed, and the result looked like somebody had chosen a serif.
+   */
+  it("has no self-referential variable", () => {
+    const offenders = [...CSS.matchAll(/(--[a-z0-9-]+):\s*var\(\s*(--[a-z0-9-]+)\s*\)/g)]
+      .filter((match) => match[1] === match[2])
+      .map((match) => match[0]);
+    expect(offenders).toEqual([]);
+  });
+
+  it("names faces that the layout actually publishes", () => {
+    // The other half of the same bug: the stylesheet can name a variable nothing defines and
+    // fail exactly as quietly. So this checks the pair rather than either side.
+    const layout = fs.readFileSync(path.join(process.cwd(), "src/app/layout.tsx"), "utf8");
+    for (const face of ["--font-geist-sans", "--font-geist-mono"]) {
+      expect(CSS, `globals.css should use ${face}`).toContain(`var(${face})`);
+      expect(layout, `layout.tsx should publish ${face}`).toContain(face);
     }
   });
 });

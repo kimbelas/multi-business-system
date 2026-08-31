@@ -19,10 +19,10 @@ proved the four-tap rule does not require shouting, and *Owner First*'s own sale
 four-field form — is what this direction refuses. It was drawn deliberately so the tradeoff
 was on the table rather than assumed away.
 
-## The six responsive rules
+## The seven responsive rules
 
 The brief says **mobile-first, always**. That is not the same as mobile-only, and the failure
-mode of mobile-first is a phone layout stretched across a desktop. These six are what "good
+mode of mobile-first is a phone layout stretched across a desktop. These seven are what "good
 on tablet and desktop" means here.
 
 1. **The keypad is capped, never stretched.** 380–420px at every width (`--pad-max`). Extra
@@ -51,6 +51,12 @@ on tablet and desktop" means here.
    in the top bar; below 640px the top bar collapses into the one line above the amount. Two
    breakpoints, three arrangements, no fourth layout to maintain.
 
+7. **Colour identifies a business and nothing else.** A hue means the same business wherever
+   you meet it — a bar segment, the share bar, a table row, the rail dot. Past days in the week
+   chart are the same hues dimmed rather than a fourth colour, because the week is context and
+   today is the subject. Nothing else on screen carries a hue except the accent on Record sale
+   and the red on a branch that did not close.
+
 ## Breakpoints
 
 Two, both Tailwind defaults. Adding a third is adding a layout somebody has to keep working.
@@ -72,7 +78,7 @@ because `shadcn init` and some `shadcn add` runs rewrite that block.
 |---|---|---|
 | `--background` | `#fafafa` | The page ground. shadcn ships this pure white, which leaves a 1px border doing all the work of separating page from card. |
 | `--card` | `#ffffff` | The raised surface. 14px radius. |
-| `--commit` | `#0d9488` | **Two places, both enumerable:** the Record sale button, and the dot marking which business you are looking at. Nowhere else — not a link, not a focus ring, not a chart series. |
+| `--commit` | `#0d9488` | **Two places, both enumerable:** the Record sale button, and the ring around the rail dot for the business you are currently in. The dot itself is that business's chart hue — the accent answers "which one am I in", the hue answers "which one is this". Nowhere else: not a link, not a chart series, not the focus ring. |
 | `--commit-deep` | `#042f2e` | The chosen payment pill. The accent hue at 28% lightness: dark enough to read as ink, related enough that the pad and the commit button look like one control group. Its only other appearance. |
 | `--good` / `--warn` | `#16a34a` / `#ca8a04` | Direction on a number, in tile subtitles. Never a surface, never a fill. |
 | `--destructive-surface` / `-border` / `-strong` | `#fef2f2` / `#fecaca` / `#991b1b` | shadcn has one destructive colour; the un-closed-branch card needs three. |
@@ -82,6 +88,36 @@ and the theme shipped with exactly one chromatic value in it — a violet `--sid
 that no one chose. It is corrected in the generated block rather than shadowed by a later
 override, because a wrong value left in the file is a wrong value somebody greps for and
 believes.
+
+## Chart colour
+
+A single-series bar chart has nothing for colour to say, so the week chart is **stacked by
+business** and the hue is the only thing telling you which slice is which. It carries the
+information rather than brightening the page, which is the whole reason colour is allowed here.
+
+Three hues at roughly the widest separation available. The accent (184) is spoken for, the two
+direction colours sit at 149 and 76, and the banned indigo-violet band 240–300 rules out every
+real blue in the palette — Tailwind `blue-600` is hue 263 — so cyan takes that job.
+
+| `--chart-` | Business | Value | |
+|---|---|---|---|
+| 1 | Laundry | `#0891b2` | cyan, hue 222 |
+| 2 | Spa | `#ec4899` | pink, hue 354 |
+| 3 | Skin Care | `#d97706` | amber, hue 58 |
+| 4 | *reserved* | `#65a30d` | lime, hue 132 — a fourth business type |
+| 5 | Unattributed | `#737373` | no hue, because it is an absence rather than a thing |
+
+`src/lib/business.ts` owns the type-to-hue mapping, and it is the only one. The colour comes
+back as a `var(--chart-N)` string rather than a Tailwind class, because `bg-chart-${n}` is not
+in the source as a literal — Tailwind generates no utility for it and the element renders
+unstyled, silently.
+
+The slot numbers are deliberately **not** derived from the position in `BUSINESS_TYPES`:
+reordering that array is a presentation change, and it would otherwise recolour every chart in
+the app.
+
+There is no chart library. The Worker is capped at 3 MiB compressed and a stacked bar is
+flexbox.
 
 ## Sizing
 
@@ -105,11 +141,19 @@ A design rule that lives only in prose drifts. These are the layers:
 
 - **`tests/design-tokens.test.ts`** — no oklch hue in 240–300 above 0.05 chroma; the accent
   stays in the teal family; every added token is defined for both light and dark; the three
-  control floors hold; the keypad cap stays between 360 and 440px. Verified by reintroducing
-  the violet and watching it fail.
+  control floors hold; the keypad cap stays between 360 and 440px; and no variable refers to
+  itself. Verified by reintroducing the violet and watching it fail.
+- **`tests-e2e/counter.spec.ts`** — the rules that are only true in a browser, measured at 390,
+  834 and 1440: four taps records a sale, a zero sale is refused, every control clears its
+  floor, the pad stays capped, commit stays under the pad, nothing scrolls sideways, the rail
+  appears only from 1024, the table only from 640, the week chart resolves three distinct
+  colours, and the share percentages add to 100.
+- **`tests/chart.test.ts`** — the share percentages sum to exactly 100 across 200 random
+  splits. Rounding each share independently gives 99 on the real numbers, and the bar would
+  have a visible gap in it.
 - **The utilities above** — a control shorter than its floor has to be written as a raw
   number to get there.
-- **This file** — everything a test cannot express, which is most of the six rules.
+- **This file** — everything a test cannot express, which is most of the seven rules.
 
 **A change to the design changes its guardrail in the same commit.** The alternative is what
 already happened once here: a palette that had moved on while the value naming it stayed
@@ -123,5 +167,25 @@ behind.
 - **No variance colour bands.** Settled already: the dashboard shows the figure and its sign
   with no colour at all until the bands are set from two weeks of real closes. The red on the
   dashboard is for a branch that did not close, which is a fact rather than a threshold.
-- **The chart is bars, and that is the only chart.** Seven bars, today filled. No second chart
-  type ships without a reason that names what question it answers.
+- **Two graphs, both bars.** The week chart, stacked by business, and one horizontal share bar
+  for today. No third graph and no other chart type ships without a reason that names the
+  question it answers — a line chart of a seven-point series answers nothing a bar does not.
+
+## Seeing it
+
+`/preview` renders both screens with invented figures, labelled as such on the page. It 404s
+outside development and the middleware only lets it through when `NODE_ENV` is not
+`production` — two guards, neither redundant: the route guard stops it rendering on a deployed
+site, the middleware guard stops the auth redirect making it unreachable locally.
+
+It exists because a picture of a responsive layout proves nothing. Drag the window across 640
+and 1024 and watch the three arrangements happen.
+
+Finding it also turned up a bug that had nothing to do with design and everything to do with
+trusting tests: `next dev` was returning 403 for every `/_next/static/chunks/*.js`, because
+Next 16 blocks cross-origin dev resources and counts `127.0.0.1` as a different host from
+`localhost` — which is the address `playwright.config.ts` points the whole suite at. Every page
+rendered and none of them hydrated, and `smoke.spec.ts` passed the entire time, because a
+status code and a visible body are both true of a page with no JavaScript running.
+`allowedDevOrigins` in `next.config.ts` is the fix; the counter spec is what would have caught
+it.

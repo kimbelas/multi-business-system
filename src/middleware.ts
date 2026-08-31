@@ -39,7 +39,19 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isPublic = path.startsWith("/login") || path.startsWith("/auth");
+
+  /*
+   * The design preview at /preview is dev-only in two places, and neither is redundant:
+   * `notFound()` inside the route stops it rendering in production, and this stops the
+   * redirect below making it unreachable in development. `next dev` sets NODE_ENV to
+   * "development"; `next build` and the Worker both set it to "production", so this can never
+   * open a route on a deployed site.
+   *
+   * Without it the preview is only viewable by signing in with production credentials, which
+   * defeats a page whose entire job is to be dragged across three widths.
+   */
+  const isDevPreview = process.env.NODE_ENV !== "production" && path.startsWith("/preview");
+  const isPublic = path.startsWith("/login") || path.startsWith("/auth") || isDevPreview;
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

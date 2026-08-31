@@ -7,9 +7,14 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  /* Was `--font-sans: var(--font-sans)`, which refers to itself and therefore resolves to
+   * nothing: `font-sans` compiled to `font-family: var(--font-sans)` with no definition
+   * anywhere, so `html { @apply font-sans }` fell through to the browser default and every
+   * heading in the app rendered in Times. Nothing failed - it just looked like a choice.
+   * `layout.tsx` publishes the face as `--font-geist-sans`, which is what this has to name. */
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-geist-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -147,9 +152,10 @@
    * which leaves a 1px border doing all the work of separating them. */
   --background: oklch(0.985 0 0);                    /* #fafafa */
 
-  /* Two places, both enumerable: the Record sale button, and the dot marking which
-   * business you are looking at. Nowhere else - not a link, not a focus ring, not a
-   * chart series. teal-600. */
+  /* Two places, both enumerable: the Record sale button, and the ring around the rail dot
+   * for the business you are currently in. The dot itself is that business's chart hue - the
+   * accent answers "which one am I in", the hue answers "which one is this". Nowhere else:
+   * not a link, not a chart series, not the focus ring. teal-600. */
   --commit: oklch(0.6 0.118 184.704);                /* #0d9488 */
   --commit-foreground: oklch(1 0 0);
 
@@ -186,11 +192,12 @@
   --destructive-border: oklch(0.396 0.141 25.723);
   --destructive-strong: oklch(0.808 0.114 19.571);
 
-  /* --sidebar-primary was a violet - oklch lightness .488, chroma .243, hue 264 - and the
-   * only chromatic value in an otherwise chroma-0 theme. A shadcn default nobody chose. It
-   * is corrected in the generated block above rather than shadowed here, because a wrong
-   * value left in the file is a wrong value somebody greps for and believes. The guard
-   * against a shadcn regeneration bringing it back is tests/design-tokens.test.ts. */
+  /* --sidebar-primary was oklch(0.488 0.243 264.376) - a violet, and the only chromatic
+   * value in an otherwise chroma-0 theme. A shadcn default nobody chose. It is corrected in
+   * the generated block above rather than shadowed here, because a wrong value left in the
+   * file is a wrong value somebody greps for and believes. The guard against a shadcn
+   * regeneration bringing it back is tests/design-tokens.test.ts, which strips comments so
+   * that naming the value here is not itself a violation. */
 }
 
 @theme inline {
@@ -210,4 +217,36 @@
   --spacing-pill: var(--pill-h);
   --spacing-commit: var(--commit-h);
   --container-pad: var(--pad-max);
+}
+
+/* ---------------------------------------------------------------- chart colour
+ *
+ * shadcn ships --chart-1..5 as five greys, which is right for a theme with no accent and
+ * wrong the moment a chart has more than one series. The week chart is stacked by business,
+ * so the hue is the only thing telling you which slice is which - it is carrying the
+ * information, not decorating it.
+ *
+ * Three hues at roughly the widest separation available. The accent (184) is spoken for, the
+ * two direction colours sit at 149 and 76, and the indigo-violet band 240-300 is banned
+ * outright - which also rules out every real blue in the palette, since Tailwind blue-600 is
+ * hue 263. Cyan takes that job instead.
+ *
+ * A hue means the same business wherever you meet it: a bar segment, the share bar, a table
+ * row, the rail. src/lib/business.ts owns the type-to-hue mapping so there is one.
+ */
+
+:root {
+  --chart-1: oklch(0.609 0.126 221.723);  /* cyan-600  - laundry */
+  --chart-2: oklch(0.656 0.241 354.308);  /* pink-500  - spa */
+  --chart-3: oklch(0.666 0.179 58.318);   /* amber-600 - skin care */
+  --chart-4: oklch(0.648 0.2 131.684);    /* lime-600  - a fourth business type */
+  --chart-5: oklch(0.556 0 0);            /* no hue: unattributed is an absence, not a thing */
+}
+
+.dark {
+  --chart-1: oklch(0.715 0.143 215.221);
+  --chart-2: oklch(0.718 0.202 349.761);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.768 0.233 130.85);
+  --chart-5: oklch(0.708 0 0);
 }
