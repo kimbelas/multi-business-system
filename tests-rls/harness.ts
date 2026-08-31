@@ -64,9 +64,32 @@ export interface Fixture {
   /** Two branches under the laundry business: A and B. */
   branchA: string;
   branchB: string;
+  /**
+   * A second organisation nobody in `personas` holds a membership in.
+   *
+   * Every other assertion in the suite is about reach *within* one tenancy - which branch, which
+   * role. This is the other axis, and without a second org there is nothing to test it against:
+   * a policy that confused "my org" with "any org" would pass every single-tenant assertion.
+   *
+   * `owner_id` on this org is deliberately set to the owner persona while granting them no
+   * membership in it, because `organizations.owner_id` and `memberships.role = 'owner'` are two
+   * different claims about ownership and only the second one is wired to RLS. Setting it this way
+   * makes that a tested property rather than an unexamined one.
+   */
+  otherOrgId: string;
+  otherBranchId: string;
   personas: Record<PersonaName, Persona>;
   /** No session at all. The check nobody remembers to write. */
   anon: SupabaseClient;
+  /**
+   * The service-role client, exposed so the suite can assert the things RLS cannot.
+   *
+   * This key bypasses every policy, so pointing an authorization assertion at it would prove
+   * nothing. It is here for the opposite case: a constraint holds against it, and the staff
+   * invite flow in section 9.7 will run with exactly this key - so "a grant cannot name another
+   * org's branch" has to be true for the one caller no policy is watching.
+   */
+  admin: SupabaseClient;
   teardown: () => Promise<void>;
 }
 
@@ -92,17 +115,17 @@ export async function setUpFixture(env: RlsEnv): Promise<Fixture> {
   const createdUsers: string[] = [];
   const createdBranches: string[] = [];
   const createdBusinesses: string[] = [];
-  let createdOrg: string | null = null;
+  const createdOrgs: string[] = [];
 
   async function teardown() {
     // Children first: memberships and branches reference businesses, which reference the org.
     // Deleting the auth users last means a failure part-way still leaves no orphan grants.
-    if (createdOrg) {
-      await admin.from("memberships").delete().eq("org_id", createdOrg);
+    for (const id of createdOrgs) {
+      await admin.from("memberships").delete().eq("org_id", id);
     }
     for (const id of createdBranches) await admin.from("branches").delete().eq("id", id);
     for (const id of createdBusinesses) await admin.from("businesses").delete().eq("id", id);
-    if (createdOrg) await admin.from("organizations").delete().eq("id", createdOrg);
+    for (const id of createdOrgs) await admin.from("organizations").delete().eq("id", id);
     for (const id of createdUsers) await admin.auth.admin.deleteUser(id);
   }
 
@@ -144,10 +167,8 @@ export async function setUpFixture(env: RlsEnv): Promise<Fixture> {
       .select("id")
       .single();
     if (org.error) throw new Error(`org: ${org.error.message}`);
-    // A const as well as the mutable one: `createdOrg` is captured by `teardown`, so TypeScript
-    // widens it back to `string | null` at every later use. This is the same value, narrowed.
     const orgId: string = org.data.id;
-    createdOrg = orgId;
+    createdOrgs.push(orgId);
 
     const businesses: Record<string, string> = {};
     for (const type of ["laundry", "spa", "skincare"]) {
@@ -188,14 +209,47 @@ export async function setUpFixture(env: RlsEnv): Promise<Fixture> {
     ]);
     if (grants.error) throw new Error(`memberships: ${grants.error.message}`);
 
+    // ---------------------------------------------------------------- a second tenancy
+    //
+    // One business, one branch, and no membership for anybody. `owner_id` names the owner
+    // persona on purpose: it is the claim RLS does *not* read, so an org they are named on and
+    // hold no grant in is the cleanest way to assert that the two are separate.
+    const otherOrg = await admin
+      .from("organizations")
+      .insert({ name: `rls-other ${runId}`, owner_id: personas.owner.userId })
+      .select("id")
+      .single();
+    if (otherOrg.error) throw new Error(`other org: ${otherOrg.error.message}`);
+    const otherOrgId: string = otherOrg.data.id;
+    createdOrgs.push(otherOrgId);
+
+    const otherBiz = await admin
+      .from("businesses")
+      .insert({ org_id: otherOrgId, type: "laundry", name: `rls other laundry ${runId}` })
+      .select("id")
+      .single();
+    if (otherBiz.error) throw new Error(`other business: ${otherBiz.error.message}`);
+    createdBusinesses.push(otherBiz.data.id);
+
+    const otherBranch = await admin
+      .from("branches")
+      .insert({ business_id: otherBiz.data.id, name: `other branch ${runId}` })
+      .select("id")
+      .single();
+    if (otherBranch.error) throw new Error(`other branch: ${otherBranch.error.message}`);
+    createdBranches.push(otherBranch.data.id);
+
     return {
       runId,
       orgId,
       businesses,
       branchA: a.id,
       branchB: b.id,
+      otherOrgId,
+      otherBranchId: otherBranch.data.id,
       personas,
       anon,
+      admin,
       teardown,
     };
   } catch (error) {

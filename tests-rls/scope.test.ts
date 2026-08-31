@@ -244,4 +244,171 @@ describeRls("row level security", () => {
       expect(error).not.toBeNull();
     });
   });
+
+  // ---------------------------------------------------------------- cross-tenant isolation
+
+  /*
+   * The other axis. Everything above asks "which branch, which role" inside one organisation,
+   * and a policy that confused "my org" with "any org" would pass all of it.
+   *
+   * `memberships` carries an `org_id` and a `branch_id` and, until 20260831172445, nothing tied
+   * the two together - so a grant could name one org and a branch belonging to another, and
+   * `accessible_branch_ids()` returned that branch because its second arm read `branch_id`
+   * without asking whose it was.
+   */
+  describe("cross-tenant isolation", () => {
+    it("refuses a grant naming another org's branch, even with the service role", async () => {
+      /*
+       * Asserted against the service role on purpose. That key bypasses every policy, so RLS is
+       * not what has to hold here - the composite foreign key is. It matters because the staff
+       * invite flow in section 9.7 runs with this key, and it is the one writer no policy sees.
+       */
+      const { error } = await f.admin.from("memberships").insert({
+        user_id: f.personas.staffA.userId,
+        org_id: f.orgId,
+        branch_id: f.otherBranchId,
+        role: "manager",
+      });
+      expect(error, "a branch grant must name that branch's own org").not.toBeNull();
+    });
+
+    it("refuses the mirror image of that grant too", async () => {
+      // The same mismatch written the other way round: the other org's id against this org's
+      // branch. One constraint has to catch both orderings, not whichever was tried first.
+      const { error } = await f.admin.from("memberships").insert({
+        user_id: f.personas.staffA.userId,
+        org_id: f.otherOrgId,
+        branch_id: f.branchA,
+        role: "manager",
+      });
+      expect(error).not.toBeNull();
+    });
+
+    it("still accepts an org-wide owner grant, whose branch_id is null", async () => {
+      /*
+       * The constraint that closes the hole must not close the owner case with it. MATCH SIMPLE
+       * skips the check when any referenced column is null, which is exactly the shape
+       * `owner_is_org_wide` requires - so this is the assertion that tells a working constraint
+       * apart from one that has broken every owner in the system.
+       */
+      const inserted = await f.admin
+        .from("memberships")
+        .insert({
+          user_id: f.personas.outsider.userId,
+          org_id: f.otherOrgId,
+          branch_id: null,
+          role: "owner",
+        })
+        .select("id")
+        .single();
+      expect(inserted.error?.message ?? null).toBeNull();
+      await f.admin.from("memberships").delete().eq("id", inserted.data!.id);
+    });
+
+    it("keeps the owner of one org out of another", async () => {
+      const orgs = await f.personas.owner.db.from("organizations").select("id");
+      expect(orgs.data?.map((row) => row.id)).not.toContain(f.otherOrgId);
+
+      const branches = await f.personas.owner.db
+        .from("branches")
+        .select("id")
+        .eq("id", f.otherBranchId);
+      expect(branches.data).toEqual([]);
+    });
+
+    it("does not treat organizations.owner_id as a grant", async () => {
+      /*
+       * The fixture names the owner persona as `owner_id` on the second org and gives them no
+       * membership in it. Authorization reads `memberships.role = 'owner'` and never that column,
+       * so the two are separate claims - and a future policy reaching for the convenient one
+       * would hand over a whole tenancy. This is the test that notices.
+       */
+      const { data } = await f.personas.owner.db
+        .from("organizations")
+        .select("id")
+        .eq("id", f.otherOrgId);
+      expect(data).toEqual([]);
+    });
+
+    it("reports no role at a branch in another org", async () => {
+      const { data } = await f.personas.owner.db.rpc("role_for_branch", {
+        target_branch: f.otherBranchId,
+      });
+      expect(data).toBeNull();
+    });
+  });
+
+  // ---------------------------------------------------------------- function privileges
+
+  /*
+   * `create function` grants EXECUTE to PUBLIC, and PUBLIC is a pseudo-role every role carries.
+   * The two earlier migrations revoked from `anon`, which removes a grant made to `anon`
+   * specifically and leaves the PUBLIC one untouched - so the privilege both files say `anon`
+   * does not have, `anon` kept.
+   *
+   * Both halves are asserted, because the fix has a failure mode in each direction: revoke too
+   * little and the tenancy is enumerable without a session, revoke too much and every policy in
+   * the app calls a function the app may not execute.
+   */
+  describe("the scope helpers", () => {
+    const NO_ARG_HELPERS = [
+      "owned_org_ids",
+      "accessible_branch_ids",
+      "owned_business_ids",
+      "accessible_business_ids",
+      "visible_profile_ids",
+      "member_org_ids",
+    ] as const;
+
+    it("cannot be executed without a session", async () => {
+      for (const fn of NO_ARG_HELPERS) {
+        const { error } = await f.anon.rpc(fn);
+        expect(error, `anon should not be able to execute ${fn}`).not.toBeNull();
+      }
+      const withArg = await f.anon.rpc("role_for_branch", { target_branch: f.branchA });
+      expect(withArg.error, "anon should not be able to execute role_for_branch").not.toBeNull();
+    });
+
+    it("can be executed by a signed-in user", async () => {
+      // Otherwise the revoke above has closed the application instead of the hole: every policy
+      // on every table calls at least one of these.
+      for (const fn of NO_ARG_HELPERS) {
+        const { error } = await f.personas.staffA.db.rpc(fn);
+        expect(error?.message ?? null, `staffA should be able to execute ${fn}`).toBeNull();
+      }
+      const withArg = await f.personas.staffA.db.rpc("role_for_branch", {
+        target_branch: f.branchA,
+      });
+      expect(withArg.error?.message ?? null).toBeNull();
+      expect(withArg.data).toBe("staff");
+    });
+  });
+
+  // ---------------------------------------------------------------- derived branch org
+
+  describe("branches.org_id", () => {
+    it("is derived from the business, not supplied by the caller", async () => {
+      /*
+       * The column is NOT NULL and no caller passes it - a trigger fills it from the business,
+       * which is what keeps `insert into branches (business_id, name)` working in the fixture, in
+       * the owner's create-a-branch path, and in the branch admin that is not written yet.
+       *
+       * The value is overwritten rather than defaulted, so naming another org here is not an
+       * error to handle but a field that cannot be forged.
+       */
+      const created = await f.admin
+        .from("branches")
+        .insert({
+          business_id: f.businesses.spa,
+          name: `derived ${f.runId}`,
+          org_id: f.otherOrgId,
+        })
+        .select("id, org_id")
+        .single();
+      expect(created.error?.message ?? null).toBeNull();
+      expect(created.data!.org_id).toBe(f.orgId);
+
+      await f.admin.from("branches").delete().eq("id", created.data!.id);
+    });
+  });
 });
