@@ -1,7 +1,9 @@
+import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { AppearanceRow } from "@/components/ui/appearance-row";
+import { Chip, RoleChip } from "@/components/ui/chip";
 import { Swatch } from "@/components/ui/swatch";
 import { businessLabel } from "@/lib/business";
 import { NAV_CAPABILITY, type NavItem, can } from "@/lib/rbac";
@@ -18,10 +20,14 @@ import { loadScope } from "@/lib/scope";
  * blocked by the phase 1 field-list gate - so this shows what it actually knows: which branch,
  * which business, what you may do here, and what is not built. A screen of plausible pesos would
  * be worse than an honest empty one, because somebody eventually screenshots it as a report.
+ *
+ * The areas list is the same `can()` call the rail uses, so the two cannot disagree - and it is
+ * phrased as what your role *permits* rather than as a menu, because none of those screens exist
+ * yet. Presenting them as navigation would be offering doors that open onto nothing, which is the
+ * failure mode `lib/rbac.ts` exists to avoid rather than to demonstrate.
  */
 export default async function BranchHome({ params }: { params: Promise<{ branchId: string }> }) {
   const { branchId } = await params;
-
   const scope = await loadScope();
   if (!scope) redirect("/login");
 
@@ -44,50 +50,56 @@ export default async function BranchHome({ params }: { params: Promise<{ branchI
   );
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-6 py-10">
+    <main className="mx-auto w-full max-w-3xl px-5 py-8 sm:px-6 sm:py-10">
       <header>
-        <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-2.5 text-sm text-muted-foreground">
           <Swatch type={business.type} />
-          {business.name} &middot; {businessLabel(business.type)}
+          <span className="truncate">{business.name}</span>
+          <span className="flex-none text-xs tracking-wide uppercase">
+            {businessLabel(business.type)}
+          </span>
         </div>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">{branch.name}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          You are {branch.role} here
-          {!branch.isActive && " · this branch is marked inactive"}
-        </p>
+        <h1 className="mt-1.5 text-2xl font-semibold tracking-tight">{branch.name}</h1>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <RoleChip role={branch.role} />
+          {!branch.isActive && <Chip tone="muted">Inactive</Chip>}
+        </div>
       </header>
 
-      <section className="mt-8 rounded-xl border border-border p-5">
-        <h2 className="text-sm font-medium">What you can do at this branch</h2>
-        <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+      <section className="mt-8 rounded-xl border border-border p-4 sm:p-5">
+        <h2 className="text-sm font-medium">What your role allows here</h2>
+        <ul className="mt-2.5 flex flex-wrap gap-1.5">
           {allowed.map((item) => (
-            <li key={item}>{item}</li>
+            <li key={item}>
+              <Chip>{item}</Chip>
+            </li>
           ))}
         </ul>
         <p className="mt-3 text-xs text-muted-foreground">
-          From the section 7 matrix, for your role here. The rail is derived from the same role, so
-          the two agree - it used to show the highest role you hold anywhere, which offered manager
-          screens at a branch where you are staff.
+          {/* Was "From the section 7 matrix ... the rail shows the same for the highest role you
+           * hold anywhere". The section number means nothing to the person reading it, and the
+           * second half stopped being true when the rail started using the role at this branch. */}
+          Set by your role at this branch, so the menu shows the same list.
         </p>
       </section>
 
-      <section className="mt-4 rounded-xl border border-dashed border-border p-5">
-        <h2 className="text-sm font-medium">Not built yet</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Sale entry, the daily close and the order board all need the money and laundry tables, and
-          those migrations are held by the phase 1 field-list gate: no migration is written until
-          one branch of each business has a written field list with every field marked &ldquo;must
-          add&rdquo; or &ldquo;deliberately dropped&rdquo;.
+      <section className="mt-4 rounded-xl border border-dashed border-border p-4 sm:p-5">
+        <h2 className="text-sm font-medium">No sales or orders yet</h2>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          Recording money and laundry orders arrives in a later release. Nothing is shown here until
+          it is real.
         </p>
       </section>
 
-      <p className="mt-8 text-sm">
-        <Link href="/" className="underline underline-offset-4">
-          All branches
-        </Link>
-      </p>
+      <Link
+        href="/"
+        className="mt-6 inline-flex min-h-pill items-center gap-1.5 rounded-xl border border-border px-4 py-2.5 text-sm hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      >
+        <ChevronLeft aria-hidden className="size-4 text-muted-foreground" />
+        All branches
+      </Link>
 
-      <AppearanceRow className="mt-8" />
+      <AppearanceRow className="mt-10" />
     </main>
   );
 }

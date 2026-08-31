@@ -92,6 +92,22 @@ export function can(role: Role, capability: Capability): boolean {
   return grant(role, capability) !== false;
 }
 
+/**
+ * The word for a role, for a screen.
+ *
+ * Same split as `businessLabel`: the enum value is what the database stores and what a policy
+ * compares, and it is not what a person reads. `staff` on screen is a variable that escaped.
+ */
+const ROLE_LABEL: Record<Role, string> = {
+  staff: "Staff",
+  manager: "Manager",
+  owner: "Owner",
+};
+
+export function roleLabel(role: Role): string {
+  return ROLE_LABEL[role];
+}
+
 /* ------------------------------------------------------------------ which role, where
  *
  * This lived in `lib/scope.ts` and could not be tested, because that module opens with
