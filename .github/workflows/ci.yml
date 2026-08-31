@@ -44,6 +44,9 @@ jobs:
 
       - name: End-to-end tests
         run: pnpm test:e2e
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
   bundle:
     # Card #15: the bundle budget is a CI gate, not a habit. The Workers free plan caps a
@@ -62,6 +65,12 @@ jobs:
 
       - name: Build the Worker bundle
         run: pnpm cf:build
+        env:
+          # NEXT_PUBLIC_* is inlined into the client bundle at BUILD time, not read at
+          # runtime - so these have to be present here, not only as Worker secrets. They are
+          # public by design; RLS is what protects the data behind the anon key.
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: Fail if the Worker exceeds the free-plan budget
         run: |
