@@ -72,20 +72,63 @@
 
 -- ---------------------------------------------------------------- 1. one relationship each
 
--- The composite key's first column is `business_id`, so this drops nothing that is not still
--- enforced by `branches_business_org_fk`.
-alter table public.branches
-  drop constraint branches_business_id_fkey;
+-- Found by the column it constrains, not by its name.
+--
+-- The original key was created implicitly by `references public.businesses (id)`, so its name is
+-- whatever PostgreSQL chose - conventionally `branches_business_id_fkey`, but naming it in a
+-- `drop constraint` makes this migration depend on a convention rather than on a fact. The SQL
+-- editor runs a script as one unit, so a wrong guess there does not fail one statement, it
+-- abandons the whole file including the grants below - which is indistinguishable, from the
+-- test output, from nobody having run it at all. Not a guess worth making twice.
+--
+-- Keyed on `conkey` being exactly the one column, so it can only ever match the narrow key and
+-- never the composite that replaces it. The loop also makes this re-runnable: applied twice, the
+-- second pass finds nothing and does nothing.
+do $$
+declare
+  target record;
+  narrow_col smallint;
+begin
+  -- branches: the single-column key to businesses that the composite now subsumes.
+  select attnum into narrow_col
+  from pg_attribute
+  where attrelid = 'public.branches'::regclass and attname = 'business_id';
 
--- Same: `memberships_branch_in_org_fk` leads with `branch_id`. Under MATCH SIMPLE a null
--- `branch_id` skips the check, which is the owner case and is what the single-column key
--- permitted too.
-alter table public.memberships
-  drop constraint memberships_branch_id_fkey;
+  for target in
+    select conname
+    from pg_constraint
+    where conrelid = 'public.branches'::regclass
+      and confrelid = 'public.businesses'::regclass
+      and contype = 'f'
+      and conkey = array[narrow_col]
+  loop
+    execute format('alter table public.branches drop constraint %I', target.conname);
+    raise notice 'dropped redundant key branches.%', target.conname;
+  end loop;
+
+  -- memberships: same shape, one table along. Nothing embeds these two today; this is the
+  -- identical landmine removed before the first query that tries.
+  select attnum into narrow_col
+  from pg_attribute
+  where attrelid = 'public.memberships'::regclass and attname = 'branch_id';
+
+  for target in
+    select conname
+    from pg_constraint
+    where conrelid = 'public.memberships'::regclass
+      and confrelid = 'public.branches'::regclass
+      and contype = 'f'
+      and conkey = array[narrow_col]
+  loop
+    execute format('alter table public.memberships drop constraint %I', target.conname);
+    raise notice 'dropped redundant key memberships.%', target.conname;
+  end loop;
+end;
+$$;
 
 -- The dropped keys had no index behind them, and a cascade from `businesses` now looks up this
 -- pair rather than `business_id` alone.
-create index branches_business_org_idx on public.branches (business_id, org_id);
+create index if not exists branches_business_org_idx on public.branches (business_id, org_id);
 
 -- ---------------------------------------------------------------- 2. anon may evaluate policies
 
