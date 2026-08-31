@@ -134,47 +134,110 @@
   }
 }
 
-/* ---------------------------------------------------------------- Counter First
+/* ================================================================ THEME: Counter
  *
- * The chosen design direction, appended rather than merged into the block above.
- * That block is generated: `npx shadcn init` and some `shadcn add` runs rewrite it,
- * and a design decision living inside generated output is a design decision that
- * disappears without a diff anyone reads. Everything here overrides by cascade,
- * which is also why the dark values restate --background: `.dark` above and `:root`
- * here have equal specificity, so source order is the only thing deciding.
+ * One block, both modes, every token that is not shadcn's. Appended rather than merged into
+ * the generated block above, because `shadcn init` and some `shadcn add` runs rewrite that one
+ * and a design decision living inside generated output disappears without a diff anyone reads.
+ * Everything here overrides by cascade - which is also why the dark scope restates
+ * `--background`: `.dark` above and `:root` here have equal specificity, so source order is
+ * the only thing deciding.
  *
- * Canvas: https://claude.ai/code/artifact/1936383a-efff-42ad-99aa-6f61517e613d
- * Rules:  docs/01-design.md
+ * Direction: docs/01-design.md
+ * Canvas:    https://claude.ai/code/artifact/1936383a-efff-42ad-99aa-6f61517e613d
+ * Numbers:   node --experimental-strip-types scripts/palette-check.mjs
+ * Gate:      tests/design-tokens.test.ts
+ *
+ * ## The business scale is the source, and shadcn's numbered slots alias it
+ *
+ * `--chart-1..5` is a contract any shadcn chart component expects, but "chart 1" means nothing
+ * to anyone reading a dashboard. So the domain tokens carry the values and the slots point at
+ * them, not the reverse: renaming a business is one line, and a component reaching for
+ * `--chart-2` still gets the spa colour.
+ *
+ * ## Why these three colours and not prettier ones
+ *
+ * They are Okabe and Ito's blue, bluish green and vermillion - a qualitative palette published
+ * for colour vision deficiency. The first palette here was cyan / pink / amber, chosen for
+ * looking good, and scripts/palette-check.mjs found that under tritanopia its pink and amber
+ * separated by an OKLab distance of 0.009: the same colour. Softening the chroma made every
+ * pair worse, because the problem was hue choice and not saturation.
+ *
+ * Of every trio measured, this is the only one where all three clear WCAG 3:1 for a graphical
+ * object against both grounds, and it ties the best worst-case separation across normal vision
+ * and all three dichromacies. The numbers are in docs/01-design.md and the floors are
+ * asserted, so a change that looks nicer and reads worse fails the suite.
  */
 
 :root {
-  /* The page is a ground and the card is raised. shadcn ships both pure white,
-   * which leaves a 1px border doing all the work of separating them. */
-  --background: oklch(0.985 0 0);                    /* #fafafa */
+  /* ---------------------------------------------------------------- ground */
 
-  /* Two places, both enumerable: the Record sale button, and the ring around the rail dot
-   * for the business you are currently in. The dot itself is that business's chart hue - the
-   * accent answers "which one am I in", the hue answers "which one is this". Nowhere else:
-   * not a link, not a chart series, not the focus ring. teal-600. */
-  --commit: oklch(0.6 0.118 184.704);                /* #0d9488 */
-  --commit-foreground: oklch(1 0 0);
+  /* The page is a ground and the card is raised. shadcn ships both pure white, which leaves a
+   * 1px border doing all the work of separating them. */
+  --background: oklch(0.985 0 0); /* #fafafa */
 
-  /* The accent hue at 28% lightness: dark enough to read as ink, related enough
-   * that the keypad and the Record sale button look like one control group. This
-   * is the accent hue only other appearance and it takes no other job. */
-  --commit-deep: oklch(0.277 0.046 192.524);         /* #042f2e */
+  /* ---------------------------------------------------------------- accent */
+
+  /* Two places, both enumerable: the Record sale button, and the ring around the rail dot for
+   * the business you are currently in. The dot itself carries that business's own colour - the
+   * accent answers "which one am I in", the hue answers "which one is this".
+   *
+   * Hue 202, not the 184 it started at. 184 sat 19 degrees from the spa green and the two
+   * separated by 0.046, close enough to read as an accident. 202 is the middle of the gap
+   * between the blue and the green and nearly doubles that, to 0.086. Chroma is 0.095 rather
+   * than 0.105 because 0.105 at this lightness falls outside sRGB, so the token would have
+   * named a colour no screen can render. */
+  --commit: oklch(0.58 0.095 202); /* #148b92 */
+  --commit-foreground: oklch(1 0 0); /* 4.05:1 on the fill; the label is large text */
+
+  /* The accent hue at 28% lightness: dark enough to read as ink, related enough that the
+   * keypad and Record sale look like one control group. Its only other appearance. */
+  --commit-deep: oklch(0.277 0.046 202); /* #10322f */
+
+  /* ---------------------------------------------------------------- status */
 
   /* Direction on a number, in tile subtitles. Never a surface, never a fill. */
-  --good: oklch(0.627 0.194 149.214);                /* #16a34a */
-  --warn: oklch(0.681 0.162 75.834);                 /* #ca8a04 */
+  --good: oklch(0.627 0.194 149.214); /* #16a34a */
+  --warn: oklch(0.681 0.162 75.834); /* #ca8a04 */
 
   /* shadcn has one destructive colour; the un-closed-branch card needs three. */
-  --destructive-surface: oklch(0.971 0.013 17.38);   /* #fef2f2 */
-  --destructive-border: oklch(0.885 0.062 18.334);   /* #fecaca */
-  --destructive-strong: oklch(0.444 0.177 26.899);   /* #991b1b */
+  --destructive-surface: oklch(0.971 0.013 17.38); /* #fef2f2 */
+  --destructive-border: oklch(0.885 0.062 18.334); /* #fecaca */
+  --destructive-strong: oklch(0.444 0.177 26.899); /* #991b1b */
 
-  /* Floors, not defaults: nothing shrinks on a bigger screen. The keypad cap is
-   * the whole responsive idea - extra width buys context, not bigger keys. */
+  /* ---------------------------------------------------------------- businesses */
+
+  --biz-laundry: oklch(0.532 0.131 244.05); /* #0072b2  Okabe-Ito blue */
+  --biz-spa: oklch(0.62 0.128 165.46); /* #009e73  Okabe-Ito bluish green */
+  --biz-skincare: oklch(0.621 0.17 47.51); /* #d55e00  Okabe-Ito vermillion */
+
+  /* Anything the app cannot attribute to a business. No hue, because it is an absence.
+   *
+   * There is deliberately no fourth business colour. One that survives all three dichromacies
+   * alongside these three and the accent is not a guess: every candidate tried collided with
+   * the vermillion under tritanopia at a distance of 0.006. A fourth business type means
+   * re-deriving the set with the script, not appending to it. */
+  --biz-none: oklch(0.556 0 0); /* #737373 */
+
+  /* How far a past day is dimmed in the week chart.
+   *
+   * A token rather than a number in the component, because the right value is different per
+   * theme and that is not obvious until you look. Fading toward white leaves a pastel that
+   * still reads as the same hue; fading toward near-black desaturates and darkens at once, and
+   * at 0.45 the vermillion arrived as brown. Dark needs to fade less to say the same thing. */
+  --chart-past: 0.45;
+
+  /* shadcn's numbered slots, aliasing the domain. */
+  --chart-1: var(--biz-laundry);
+  --chart-2: var(--biz-spa);
+  --chart-3: var(--biz-skincare);
+  --chart-4: var(--biz-none);
+  --chart-5: var(--biz-none);
+
+  /* ---------------------------------------------------------------- controls */
+
+  /* Floors, not defaults: nothing shrinks on a bigger screen. The keypad cap is the whole
+   * responsive idea - extra width buys context, not bigger keys. */
   --key-h: 62px;
   --pill-h: 46px;
   --commit-h: 60px;
@@ -183,21 +246,35 @@
 
 .dark {
   --background: oklch(0.145 0 0);
-  --commit: oklch(0.704 0.14 182.503);
+
+  --commit: oklch(0.75 0.09 202); /* #60bfc6 */
   --commit-foreground: oklch(0.145 0 0);
-  --commit-deep: oklch(0.386 0.063 188.416);
+  --commit-deep: oklch(0.386 0.063 202);
+
   --good: oklch(0.723 0.19 149.579);
   --warn: oklch(0.795 0.184 86.047);
+
   --destructive-surface: oklch(0.258 0.092 26.042);
   --destructive-border: oklch(0.396 0.141 25.723);
   --destructive-strong: oklch(0.808 0.114 19.571);
 
-  /* --sidebar-primary was oklch(0.488 0.243 264.376) - a violet, and the only chromatic
-   * value in an otherwise chroma-0 theme. A shadcn default nobody chose. It is corrected in
-   * the generated block above rather than shadowed here, because a wrong value left in the
-   * file is a wrong value somebody greps for and believes. The guard against a shadcn
-   * regeneration bringing it back is tests/design-tokens.test.ts, which strips comments so
-   * that naming the value here is not itself a violation. */
+  /* Lightened for a dark ground rather than reused: the light values clear 3:1 against #fafafa
+   * and would sit near 1.4:1 against this one. All four clear 5:1 here, and the worst-case
+   * separation across the three dichromacies is 0.090 - the same as light. */
+  --biz-laundry: oklch(0.7 0.12 244); /* #56a6e3 */
+  --biz-spa: oklch(0.78 0.13 165.5); /* #55d1a3 */
+  --biz-skincare: oklch(0.74 0.15 47.5); /* #f68a50 */
+  --biz-none: oklch(0.6 0 0); /* #808080 */
+
+  /* Higher than light: see the note on the light value. */
+  --chart-past: 0.6;
+
+  /* --sidebar-primary was oklch(0.488 0.243 264.376) - a violet, and the only chromatic value
+   * in an otherwise chroma-0 theme. A shadcn default nobody chose. It is corrected in the
+   * generated block above rather than shadowed here, because a wrong value left in the file is
+   * a wrong value somebody greps for and believes. The guard against a shadcn regeneration
+   * bringing it back is tests/design-tokens.test.ts, which strips comments so that naming the
+   * value here is not itself a violation. */
 }
 
 @theme inline {
@@ -210,43 +287,19 @@
   --color-destructive-border: var(--destructive-border);
   --color-destructive-strong: var(--destructive-strong);
 
-  /* So the floors are reachable as utilities - h-key, min-h-pill, h-commit,
-   * max-w-pad - and a violation shows up in the markup instead of being a number
-   * somebody was supposed to remember. */
+  /* So a business colour known at author time is `bg-biz-spa` rather than an inline style. One
+   * chosen at runtime still goes through `businessColor()` - see src/lib/business.ts for why a
+   * template-literal class name renders unstyled. */
+  --color-biz-laundry: var(--biz-laundry);
+  --color-biz-spa: var(--biz-spa);
+  --color-biz-skincare: var(--biz-skincare);
+  --color-biz-none: var(--biz-none);
+
+  /* So the floors are reachable as utilities - h-key, min-h-pill, h-commit, max-w-pad - and a
+   * violation shows up in the markup instead of being a number somebody was supposed to
+   * remember. */
   --spacing-key: var(--key-h);
   --spacing-pill: var(--pill-h);
   --spacing-commit: var(--commit-h);
   --container-pad: var(--pad-max);
-}
-
-/* ---------------------------------------------------------------- chart colour
- *
- * shadcn ships --chart-1..5 as five greys, which is right for a theme with no accent and
- * wrong the moment a chart has more than one series. The week chart is stacked by business,
- * so the hue is the only thing telling you which slice is which - it is carrying the
- * information, not decorating it.
- *
- * Three hues at roughly the widest separation available. The accent (184) is spoken for, the
- * two direction colours sit at 149 and 76, and the indigo-violet band 240-300 is banned
- * outright - which also rules out every real blue in the palette, since Tailwind blue-600 is
- * hue 263. Cyan takes that job instead.
- *
- * A hue means the same business wherever you meet it: a bar segment, the share bar, a table
- * row, the rail. src/lib/business.ts owns the type-to-hue mapping so there is one.
- */
-
-:root {
-  --chart-1: oklch(0.609 0.126 221.723);  /* cyan-600  - laundry */
-  --chart-2: oklch(0.656 0.241 354.308);  /* pink-500  - spa */
-  --chart-3: oklch(0.666 0.179 58.318);   /* amber-600 - skin care */
-  --chart-4: oklch(0.648 0.2 131.684);    /* lime-600  - a fourth business type */
-  --chart-5: oklch(0.556 0 0);            /* no hue: unattributed is an absence, not a thing */
-}
-
-.dark {
-  --chart-1: oklch(0.715 0.143 215.221);
-  --chart-2: oklch(0.718 0.202 349.761);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.768 0.233 130.85);
-  --chart-5: oklch(0.708 0 0);
 }

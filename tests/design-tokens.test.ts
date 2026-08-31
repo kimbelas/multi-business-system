@@ -45,11 +45,32 @@ describe("colour", () => {
     expect(oklchValues().length).toBeGreaterThan(20);
   });
 
+  /**
+   * The band is 255-320, and it was 240-300 for exactly one day.
+   *
+   * 240-300 was picked as round numbers rather than from where the hues actually sit, and it
+   * banned every blue worth having: Okabe and Ito's blue - the one colour in the accessible
+   * palette that clears 3:1 on both grounds - is hue 244. The rule exists to keep out the
+   * indigo-violet-purple family that makes an interface read as generated, and in OKLCH that
+   * family starts at Tailwind indigo-500 (277) and runs through violet-500 (292) to purple-500
+   * (304). blue-600, the archetypal one, is 263.
+   *
+   * So the low edge is 255: it still refuses blue-600 and everything above it, and it admits a
+   * clean blue 11 degrees below. The high edge is 320, which lets magenta through and keeps
+   * purple out. Narrowing a rule to fit a colour would be cheating; narrowing it because it was
+   * measured wrong and was costing the chart its accessibility is the rule working.
+   */
   it("has no indigo, violet or purple", () => {
-    // Hue 240-300 is the family. Below 0.05 chroma the hue is not perceptible, so a
-    // near-grey with an incidental hue reading is not a violation.
-    const offenders = oklchValues().filter((v) => v.c > 0.05 && v.h >= 240 && v.h <= 300);
+    // Below 0.05 chroma the hue is not perceptible, so a near-grey with an incidental hue
+    // reading is not a violation.
+    const offenders = oklchValues().filter((v) => v.c > 0.05 && v.h >= 255 && v.h <= 320);
     expect(offenders.map((v) => v.raw)).toEqual([]);
+  });
+
+  it("still refuses the blue that started this", () => {
+    // A guard whose band was just moved has to be shown to still catch what it was for.
+    const banned = { l: 0.546, c: 0.245, h: 262.881 }; // Tailwind blue-600
+    expect(banned.c > 0.05 && banned.h >= 255 && banned.h <= 320).toBe(true);
   });
 
   it("keeps the accent in the teal family", () => {

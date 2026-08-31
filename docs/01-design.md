@@ -19,10 +19,10 @@ proved the four-tap rule does not require shouting, and *Owner First*'s own sale
 four-field form — is what this direction refuses. It was drawn deliberately so the tradeoff
 was on the table rather than assumed away.
 
-## The seven responsive rules
+## The eight rules
 
 The brief says **mobile-first, always**. That is not the same as mobile-only, and the failure
-mode of mobile-first is a phone layout stretched across a desktop. These seven are what "good
+mode of mobile-first is a phone layout stretched across a desktop. The first six are what "good
 on tablet and desktop" means here.
 
 1. **The keypad is capped, never stretched.** 380–420px at every width (`--pad-max`). Extra
@@ -52,10 +52,17 @@ on tablet and desktop" means here.
    breakpoints, three arrangements, no fourth layout to maintain.
 
 7. **Colour identifies a business and nothing else.** A hue means the same business wherever
-   you meet it — a bar segment, the share bar, a table row, the rail dot. Past days in the week
-   chart are the same hues dimmed rather than a fourth colour, because the week is context and
-   today is the subject. Nothing else on screen carries a hue except the accent on Record sale
-   and the red on a branch that did not close.
+   you meet it — a bar segment, the share bar, a table row, the rail square. Past days in the
+   week chart are the same hues dimmed rather than a fourth colour, because the week is context
+   and today is the subject; *how far* they dim is a token, not a number, because fading toward
+   near-black desaturates as well as darkens and dark needs to fade less. Nothing else on screen
+   carries a hue except the accent on Record sale and the red on a branch that did not close.
+
+8. **A colour choice is a measurement, not a preference.** Every hue clears WCAG 3:1 against
+   its own ground and stays at least 0.08 in OKLab distance from every other under normal vision
+   and all three dichromacies — in both themes. `scripts/palette-check.mjs` prints the table and
+   `tests/palette.test.ts` holds the floors, so a palette that looks nicer and reads worse fails
+   the suite. This rule exists because the first palette here did exactly that.
 
 ## Breakpoints
 
@@ -78,16 +85,28 @@ because `shadcn init` and some `shadcn add` runs rewrite that block.
 |---|---|---|
 | `--background` | `#fafafa` | The page ground. shadcn ships this pure white, which leaves a 1px border doing all the work of separating page from card. |
 | `--card` | `#ffffff` | The raised surface. 14px radius. |
-| `--commit` | `#0d9488` | **Two places, both enumerable:** the Record sale button, and the ring around the rail dot for the business you are currently in. The dot itself is that business's chart hue — the accent answers "which one am I in", the hue answers "which one is this". Nowhere else: not a link, not a chart series, not the focus ring. |
-| `--commit-deep` | `#042f2e` | The chosen payment pill. The accent hue at 28% lightness: dark enough to read as ink, related enough that the pad and the commit button look like one control group. Its only other appearance. |
+| `--commit` | `#148b92` | Hue 202, chroma 0.095. **Two places, both enumerable:** the Record sale button, and the ring around the rail dot for the business you are currently in. The dot itself is that business's chart hue — the accent answers "which one am I in", the hue answers "which one is this". Nowhere else: not a link, not a chart series, not the focus ring. |
+| `--commit-deep` | `#10322f` | The chosen payment pill. The accent hue at 28% lightness: dark enough to read as ink, related enough that the pad and the commit button look like one control group. Its only other appearance. |
 | `--good` / `--warn` | `#16a34a` / `#ca8a04` | Direction on a number, in tile subtitles. Never a surface, never a fill. |
 | `--destructive-surface` / `-border` / `-strong` | `#fef2f2` / `#fecaca` / `#991b1b` | shadcn has one destructive colour; the un-closed-branch card needs three. |
 
-**No indigo, violet or purple.** That is the hue family every generated interface reaches for,
-and the theme shipped with exactly one chromatic value in it — a violet `--sidebar-primary`
-that no one chose. It is corrected in the generated block rather than shadowed by a later
-override, because a wrong value left in the file is a wrong value somebody greps for and
-believes.
+**No indigo, violet or purple — hue 255 to 320.** That is the family every generated
+interface reaches for, and the theme shipped with exactly one chromatic value in it: a violet
+`--sidebar-primary` that no one chose. It is corrected in the generated block rather than
+shadowed by a later override, because a wrong value left in the file is a wrong value somebody
+greps for and believes.
+
+The band was **240–300 for one day**, and that was wrong. Those were round numbers rather than
+measured ones, and they banned every blue worth having — Okabe and Ito's blue, the one colour in
+the accessible set that clears 3:1 on both grounds, is hue 244. In OKLCH the family this rule is
+about starts at Tailwind `indigo-500` (277) and runs through `violet-500` (292) to `purple-500`
+(304); `blue-600`, the archetypal generated blue, is 263. So the low edge is 255: it still
+refuses `blue-600` and everything above it, and admits a clean blue eleven degrees below. The
+high edge is 320, which lets magenta through and keeps purple out.
+
+Narrowing a rule to fit a colour would be cheating. Narrowing it because it was measured wrong
+and was costing the chart its accessibility is the rule working — and `tests/design-tokens.test.ts`
+carries a second assertion proving the moved band still catches `blue-600`.
 
 ## Chart colour
 
@@ -95,30 +114,77 @@ A single-series bar chart has nothing for colour to say, so the week chart is **
 business** and the hue is the only thing telling you which slice is which. It carries the
 information rather than brightening the page, which is the whole reason colour is allowed here.
 
-Three hues at roughly the widest separation available. The accent (184) is spoken for, the two
-direction colours sit at 149 and 76, and the banned indigo-violet band 240–300 rules out every
-real blue in the palette — Tailwind `blue-600` is hue 263 — so cyan takes that job.
+These three are **Okabe and Ito's** blue, bluish green and vermillion — a qualitative palette
+published for colour vision deficiency.
 
-| `--chart-` | Business | Value | |
-|---|---|---|---|
-| 1 | Laundry | `#0891b2` | cyan, hue 222 |
-| 2 | Spa | `#ec4899` | pink, hue 354 |
-| 3 | Skin Care | `#d97706` | amber, hue 58 |
-| 4 | *reserved* | `#65a30d` | lime, hue 132 — a fourth business type |
-| 5 | Unattributed | `#737373` | no hue, because it is an absence rather than a thing |
+The first set here was cyan / pink / amber, picked because it looked good. `palette-check`
+found that under tritanopia its pink and amber separated by an OKLab distance of **0.009**: for
+those readers, two of the three series in the app were the same colour. Nothing on screen said
+so and no test failed. Softening the chroma made every pair *worse*, because the problem was
+hue choice and not saturation.
 
-`src/lib/business.ts` owns the type-to-hue mapping, and it is the only one. The colour comes
-back as a `var(--chart-N)` string rather than a Tailwind class, because `bg-chart-${n}` is not
-in the source as a literal — Tailwind generates no utility for it and the element renders
-unstyled, silently.
+Of every trio measured, this is the only one where all three clear 3:1 against both grounds,
+and it ties the best worst-case separation available:
 
-The slot numbers are deliberately **not** derived from the position in `BUSINESS_TYPES`:
-reordering that array is a presentation change, and it would otherwise recolour every chart in
-the app.
+| | Business | Light | Dark | Contrast (light) |
+|---|---|---|---|---|
+| `--biz-laundry` | Laundry | `#0172b2` | `#56a6e3` | 4.96:1 |
+| `--biz-spa` | Spa | `#099e73` | `#55d1a3` | 3.28:1 |
+| `--biz-skincare` | Skin Care | `#d55e01` | `#f68a50` | 3.71:1 |
+| `--biz-none` | Unattributed | `#737373` | `#808080` | 4.53:1 |
+
+Worst-case pairwise separation, across normal vision and all three dichromacies: **0.090** in
+both themes, against a floor of 0.08. The pair that sets it is laundry/spa under tritanopia.
+
+**There is deliberately no fourth business colour.** One that survives alongside these three
+and the accent is not a guess — every candidate tried collided with the vermillion under
+tritanopia at a distance of 0.006. A fourth business type means re-deriving the set with the
+script, not appending to it. Until then `--chart-4` and `--chart-5` both point at the grey.
+
+**The accent moved out of the way.** It was hue 184, nineteen degrees from the spa green and
+separated from it by 0.046 — close enough to read as an accident. Hue 202 is the middle of the
+gap between the blue and the green and nearly doubles that, to 0.086. Chroma is 0.095 rather
+than 0.105 because 0.105 at that lightness falls outside sRGB, so the token would have named a
+colour no screen can render.
+
+`src/lib/business.ts` owns the type-to-colour mapping and is the only place it exists. The
+colour comes back as a `var(--biz-*)` string rather than a Tailwind class, because
+`bg-biz-${type}` is not in the source as a literal — Tailwind generates no utility for it and
+the element renders unstyled, silently. Where the type is known at author time, `bg-biz-spa`
+is the better spelling and exists.
+
+**The domain tokens are the source and shadcn's numbered slots alias them**, not the reverse:
+`--chart-2: var(--biz-spa)`. "Chart 2" is not something anyone reading a dashboard can look up,
+and this way renaming a business is one line while a component reaching for `--chart-2` still
+gets the right colour.
 
 There is no chart library. The Worker is capped at 3 MiB compressed and a stacked bar is
 flexbox.
 
+## Theme
+
+One theme, two modes, named **Counter**, defined in a single block at the foot of
+`src/app/globals.css`. Every token has a light value and a dark value; there is no token that
+exists in one mode and not the other, and `tests/palette.test.ts` runs the same floors against
+both.
+
+- **Dark is chosen before the first paint.** A blocking inline script in `layout.tsx` reads
+  `localStorage` and falls back to `prefers-color-scheme`, so a dark-mode reload does not flash
+  white. Doing that work in an effect is what causes the flash, and there is no way around the
+  inline script. It is a string literal with no interpolation.
+- **`ThemeToggle` holds no React state.** The obvious version keeps the current mode in
+  `useState` and renders the matching icon, which mismatches on hydration every time — the
+  server cannot know what the browser chose. Both icons are in the markup and CSS picks:
+  `dark:hidden` and `hidden dark:block`.
+- **There is no toggle below `sm`,** deliberately. The phone layout has no chrome to hang one
+  on, and the inline script already follows the operating system — which is the setting a phone
+  user has actually made. A manual override belongs on the Settings screen when it exists, not
+  on the four-tap screen.
+- **`--chart-past` is a token because the right value differs per mode.** Fading a bar toward
+  white leaves a pastel that still reads as the same hue; fading toward near-black desaturates
+  and darkens at once, and at 0.45 the vermillion arrived as brown. Light 0.45, dark 0.6.
+
+## Sizing
 ## Sizing
 
 | | Value | |
@@ -139,21 +205,32 @@ remember.
 
 A design rule that lives only in prose drifts. These are the layers:
 
-- **`tests/design-tokens.test.ts`** — no oklch hue in 240–300 above 0.05 chroma; the accent
-  stays in the teal family; every added token is defined for both light and dark; the three
-  control floors hold; the keypad cap stays between 360 and 440px; and no variable refers to
-  itself. Verified by reintroducing the violet and watching it fail.
+- **`tests/design-tokens.test.ts`** — no oklch hue in 255–320 above 0.05 chroma, and a second
+  assertion that the moved band still catches `blue-600`; the accent stays in the teal family;
+  every added token is defined for both light and dark; the three control floors hold; the
+  keypad cap stays between 360 and 440px; and no variable refers to itself. Verified by
+  reintroducing both the violet and the self-reference and watching the right test fail.
+- **`tests/palette.test.ts`** — for each theme: every business colour declared, inside sRGB,
+  clearing 3:1 against its own ground, and at least 0.08 from every other under normal vision
+  and all three dichromacies. Plus that the numbered chart slots alias the domain tokens.
+- **`tests/business.test.ts`** — the registry covers exactly the values the `business_type`
+  enum declares, read out of the migration. Two hand-maintained lists in two languages, and the
+  failure when they disagree is `BUSINESS[row.type]` returning `undefined` at render time.
+- **`scripts/palette-check.mjs`** — prints the table the numbers in this file come from. Same
+  maths as the gate, so the doc and the test cannot disagree.
 - **`tests-e2e/counter.spec.ts`** — the rules that are only true in a browser, measured at 390,
   834 and 1440: four taps records a sale, a zero sale is refused, every control clears its
   floor, the pad stays capped, commit stays under the pad, nothing scrolls sideways, the rail
   appears only from 1024, the table only from 640, the week chart resolves three distinct
-  colours, and the share percentages add to 100.
+  colours, and the share percentages add to 100. Plus the theme: dark follows the OS on a first
+  visit, the toggle is remembered across a reload, the dark chart keeps three distinct colours,
+  and no measurement moves between modes.
 - **`tests/chart.test.ts`** — the share percentages sum to exactly 100 across 200 random
   splits. Rounding each share independently gives 99 on the real numbers, and the bar would
   have a visible gap in it.
 - **The utilities above** — a control shorter than its floor has to be written as a raw
   number to get there.
-- **This file** — everything a test cannot express, which is most of the seven rules.
+- **This file** — everything a test cannot express, which is most of the eight rules.
 
 **A change to the design changes its guardrail in the same commit.** The alternative is what
 already happened once here: a palette that had moved on while the value naming it stayed
@@ -161,9 +238,10 @@ behind.
 
 ## Deliberately not decided
 
-- **Dark mode is defined but not drawn.** Every token has a dark value so the app does not
-  break in it, but no artboard was drawn dark and nothing has been checked. *Dark Counter* was
-  one of the ten and was not chosen; if dark becomes real it is a design pass, not a token flip.
+- **The artboards are light only.** Dark is built, measured and rendered — see the Theme
+  section — but the canvas was drawn light and stays that way: two sets of seven artboards is
+  twice the drift surface for a mode the tests already hold to the same floors. Read dark at
+  `/preview`, not on the canvas.
 - **No variance colour bands.** Settled already: the dashboard shows the figure and its sign
   with no colour at all until the bands are set from two weeks of real closes. The red on the
   dashboard is for a branch that did not close, which is a fact rather than a threshold.

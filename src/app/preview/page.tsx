@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { CounterScreen } from "@/components/counter/counter-screen";
 import { Dashboard, type BusinessRow, type Tile } from "@/components/dashboard/dashboard";
 import { AppShell, type BusinessLink } from "@/components/shell/app-shell";
+import { Peso } from "@/components/ui/peso";
 import type { ChartDay } from "@/lib/chart";
 
 /**
@@ -69,7 +70,7 @@ function Recent() {
     <section className="rounded-xl border border-border bg-card p-4 sm:px-[18px]">
       <header className="mb-1.5 flex items-baseline justify-between">
         <h2 className="text-[12.5px] text-muted-foreground">Today at this branch</h2>
-        <span className="font-mono text-[12.5px] text-muted-foreground tabular-nums">₱1,140.00</span>
+        <Peso amount="1,140.00" className="text-[12.5px] text-muted-foreground" />
       </header>
       <ul>
         {RECENT.map((sale) => (
@@ -83,7 +84,7 @@ function Recent() {
                 {sale.time} · {sale.method}
               </div>
             </div>
-            <div className="font-mono text-[14.5px] font-semibold tabular-nums">₱{sale.amount}</div>
+            <Peso amount={sale.amount} className="text-[14.5px] font-semibold" />
           </li>
         ))}
       </ul>

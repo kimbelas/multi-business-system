@@ -75,11 +75,13 @@ describe("business colour", () => {
     expect(new Set(colors).size).toBe(BUSINESS_TYPES.length);
   });
 
-  it("resolves through the theme rather than a runtime class name", () => {
-    // `bg-chart-${n}` is not in the source as a literal, so Tailwind generates no utility for
-    // it and the element renders unstyled. This is why the mapping returns a custom property.
+  it("resolves through a domain token, not a numbered slot", () => {
+    // The values live on `--biz-*` and shadcn's `--chart-N` alias them, not the reverse: a
+    // dashboard is read by people, and "chart 2" is not a thing anyone can look up. The token
+    // shape and the slot aliasing are asserted in tests/business.test.ts and
+    // tests/palette.test.ts; here it is only that the mapping is a custom property at all.
     for (const type of BUSINESS_TYPES) {
-      expect(businessColor(type)).toMatch(/^var\(--chart-[1-5]\)$/);
+      expect(businessColor(type)).toMatch(/^var\(--biz-[a-z]+\)$/);
     }
   });
 });

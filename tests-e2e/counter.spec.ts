@@ -123,7 +123,7 @@ test.describe("graphs", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/preview");
 
-    const segments = page.locator('[data-testid="dashboard"] section:has-text("This week") div[style*="--chart-"]');
+    const segments = page.locator('[data-testid="dashboard"] section:has-text("This week") div[style*="--biz-"]');
     // Seven days, three businesses each. A single-series chart would have seven.
     await expect(segments).toHaveCount(21);
 
@@ -156,4 +156,81 @@ test.describe("graphs", () => {
       expect(total).toBe(100);
     });
   }
+});
+
+test.describe("theme", () => {
+  /*
+   * Dark existed as tokens for a while before anything rendered it, which is the same as not
+   * having it: the values were plausible and unexercised. These are the four things that have
+   * to be true for a second theme to be real rather than declared.
+   */
+
+  test("follows the operating system on a first visit", async ({ page }) => {
+    // No stored preference, so the inline script in layout.tsx has to fall back to the OS
+    // rather than to light. A phone in dark mode should not get a white flash and stay white.
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.goto("/preview");
+    await expect(page.locator("html")).toHaveClass(/dark/);
+
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.goto("/preview");
+    await expect(page.locator("html")).not.toHaveClass(/dark/);
+  });
+
+  test("changes nothing about the layout", async ({ page }) => {
+    // A theme is colour. If a measurement moves, something in the dark path is not a token.
+    const measure = () =>
+      page.evaluate(() => {
+        const pad = document.querySelector('[data-testid="counter-screen"] .grid.grid-cols-3')!;
+        const commit = document.querySelector(
+          '[data-testid="counter-screen"] button[type="submit"]',
+        )!;
+        return {
+          pad: Math.round(pad.getBoundingClientRect().width),
+          key: Math.round(pad.querySelector("button")!.getBoundingClientRect().height),
+          commit: Math.round(commit.getBoundingClientRect().height),
+        };
+      });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.goto("/preview");
+    const light = await measure();
+
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.goto("/preview");
+    expect(await measure()).toEqual(light);
+  });
+
+  test("keeps three distinct chart colours in dark", async ({ page }) => {
+    // The dark values are a separate set, not the light ones reused, so they need their own
+    // check that they did not collapse into each other.
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/preview");
+
+    const segments = page.locator(
+      '[data-testid="dashboard"] section:has-text("This week") div[style*="--biz-"]',
+    );
+    await expect(segments).toHaveCount(21);
+    const colours = await segments.evaluateAll(
+      (nodes) => [...new Set(nodes.map((n) => getComputedStyle(n).backgroundColor))].length,
+    );
+    expect(colours).toBe(3);
+  });
+
+  test("the toggle switches and is remembered across a reload", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.goto("/preview");
+    await expect(page.locator("html")).not.toHaveClass(/dark/);
+
+    // There are two toggles in the markup, one per breakpoint, and only one is ever visible.
+    await page.getByLabel("Switch between light and dark").first().click();
+    await expect(page.locator("html")).toHaveClass(/dark/);
+
+    // The point of writing it down: an explicit choice has to beat the OS on the next visit.
+    await page.reload();
+    await expect(page.locator("html")).toHaveClass(/dark/);
+  });
 });
