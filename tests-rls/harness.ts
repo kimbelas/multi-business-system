@@ -190,14 +190,28 @@ export async function setUpFixture(env: RlsEnv): Promise<Fixture> {
   const createdOrgs: string[] = [];
 
   async function teardown() {
-    // Children first: memberships and branches reference businesses, which reference the org.
-    // Deleting the auth users last means a failure part-way still leaves no orphan grants.
-    for (const id of createdOrgs) {
-      await admin.from("memberships").delete().eq("org_id", id);
-    }
+    /*
+     * The ORGANISATION first, and this order is a correction rather than a preference.
+     *
+     * It used to be children first - memberships, branches, businesses, then the org - which was
+     * sound reasoning about foreign keys and became wrong the moment `assert_org_keeps_an_owner`
+     * existed (card 0034). That trigger refuses removing an organisation's last owner row while the
+     * organisation is still there, which is exactly what "memberships first" does. Nothing leaked,
+     * because the org delete that followed cascaded everything away - but the membership delete
+     * failed silently on every single run, and this function discards every error it gets.
+     *
+     * Deleting the org is enough: `memberships.org_id`, `businesses.org_id` and
+     * `branches.business_id` are all `on delete cascade`, and the trigger deliberately exempts an
+     * organisation that no longer exists. The explicit deletes below are kept for the rows that are
+     * NOT reached that way - nothing today, and they cost one round trip each to stay honest if the
+     * schema changes.
+     *
+     * The auth users go last: `profiles` cascades from `auth.users` and memberships reference
+     * profiles, so a user deleted while a grant still names them is the one ordering that can fail.
+     */
+    for (const id of createdOrgs) await admin.from("organizations").delete().eq("id", id);
     for (const id of createdBranches) await admin.from("branches").delete().eq("id", id);
     for (const id of createdBusinesses) await admin.from("businesses").delete().eq("id", id);
-    for (const id of createdOrgs) await admin.from("organizations").delete().eq("id", id);
     for (const id of createdUsers) await admin.auth.admin.deleteUser(id);
   }
 

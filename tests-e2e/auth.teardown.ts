@@ -63,57 +63,33 @@ teardown("remove the personas and their organisation", async () => {
   };
 
   /*
-   * Children first: memberships reference branches and organisations, branches reference
-   * businesses. The auth users go last, so a failure part-way leaves no grant pointing at an
-   * account that no longer exists.
+   * The ORGANISATION first, which is a correction and not a preference.
    *
-   * The users depend on the organisations for a reason the ordering does not show:
-   * `organizations.owner_id` references `profiles(id)` with no `on delete` clause, and
-   * `profiles.id` cascades from `auth.users`. Both fixture organisations name the owner persona, so
-   * deleting that account is possible only once both organisations are gone. If an organisation
-   * delete fails, the owner's account cannot be removed either - which is exactly why these
-   * failures are collected rather than assumed.
+   * It used to be children first - memberships, then branches, businesses, then the org. Sound
+   * reasoning about foreign keys, and wrong the moment `assert_org_keeps_an_owner` existed (card
+   * 0034): that trigger refuses removing an organisation's last owner row while the organisation is
+   * still there, which is precisely what "memberships first" does. This file's own error collection
+   * caught it on the first run after the trigger shipped - the policy suite's teardown makes the
+   * identical mistake and passed, because it discards its errors.
+   *
+   * One delete is enough. `memberships.org_id`, `businesses.org_id` and `branches.business_id` are
+   * all `on delete cascade`, so the organisation takes every grant, business and branch with it -
+   * including anything a SPEC created, which is why the by-organisation sweep that used to be here
+   * is gone rather than reordered again. The trigger deliberately exempts an organisation that no
+   * longer exists, and the persona suite asserts that arm precisely because this teardown depends
+   * on it.
+   *
+   * The explicit deletes that follow are for rows the cascade does not reach. There are none today;
+   * they cost one round trip each and would notice a schema change rather than leaking silently.
    */
-  for (const orgId of [manifest.orgId, manifest.otherOrgId]) {
-    record(
-      `memberships of ${orgId}`,
-      (await admin.from("memberships").delete().eq("org_id", orgId)).error,
-    );
+  for (const id of [manifest.orgId, manifest.otherOrgId]) {
+    record(`organisation ${id}`, (await admin.from("organizations").delete().eq("id", id)).error);
   }
   for (const id of manifest.branchIds) {
     record(`branch ${id}`, (await admin.from("branches").delete().eq("id", id)).error);
   }
   for (const id of manifest.businessIds) {
     record(`business ${id}`, (await admin.from("businesses").delete().eq("id", id)).error);
-  }
-
-  /*
-   * Anything a SPEC created, swept by organisation - businesses added through the create form were
-   * not in the manifest, because they did not exist when it was written.
-   *
-   * This runs BEFORE the organisations are deleted, and that ordering is the whole point. It used
-   * to sit after them, where `businesses.org_id` had already cascaded: the select returned zero
-   * rows on every run and the block could never once do the job its comment claimed. A guard that
-   * cannot fire, in the commit written to fix a guard that could not fail.
-   *
-   * Their branches cascade from `businesses.business_id`, so there is no second sweep to write.
-   */
-  for (const orgId of [manifest.orgId, manifest.otherOrgId]) {
-    const { data: leftover, error } = await admin
-      .from("businesses")
-      .select("id")
-      .eq("org_id", orgId);
-    record(`sweep of ${orgId}`, error);
-    for (const row of leftover ?? []) {
-      record(
-        `swept business ${row.id}`,
-        (await admin.from("businesses").delete().eq("id", row.id)).error,
-      );
-    }
-  }
-
-  for (const id of [manifest.orgId, manifest.otherOrgId]) {
-    record(`organisation ${id}`, (await admin.from("organizations").delete().eq("id", id)).error);
   }
 
   for (const id of manifest.userIds) {

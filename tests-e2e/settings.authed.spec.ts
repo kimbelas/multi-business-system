@@ -231,7 +231,18 @@ test.describe("the owner", () => {
        * this row is exactly the change that would tempt somebody to shrink them.
        */
       await page.goto("/settings");
-      const row = page.getByRole("listitem").filter({ hasText: "Not signed in yet" }).first();
+      /*
+       * Found by the presence of a control, not by a chip.
+       *
+       * The first version anchored on "Not signed in yet", which does not exist here: the setup
+       * project signs every persona in, so no row carries that chip - and this same commit stopped
+       * offering "New password" to anybody who has signed in, so the row is thinner than the mental
+       * model behind that locator. A row that HAS a Remove button is what this test is about.
+       */
+      const row = page
+        .getByRole("listitem")
+        .filter({ has: page.getByRole("button", { name: "Remove" }) })
+        .first();
       await expect(row).toBeVisible();
 
       const buttons = row.getByRole("button");
