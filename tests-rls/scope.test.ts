@@ -310,6 +310,28 @@ describeRls("row level security", () => {
       expect(error).not.toBeNull();
     });
 
+    it("refuses an owner grant pinned to a single branch", async () => {
+      /*
+       * Card 0019's last criterion, and until now a claim rather than a test: `actions.ts` said
+       * "the persona suite asserts it" and the suite asserted the composite foreign key in both
+       * orderings and the org-wide owner being accepted - never this.
+       *
+       * `owner_is_org_wide` is what refuses it. An owner scoped to one branch is a grant that
+       * means nothing: every policy that consults `owned_org_ids()` ignores `branch_id`, so such a
+       * row would read as full org access while looking like a branch-level one on screen.
+       *
+       * Asserted against the service role, because the constraint has to hold for the invite path,
+       * which is the one writer no policy watches.
+       */
+      const { error } = await f.admin.from("memberships").insert({
+        user_id: f.personas.outsider.userId,
+        org_id: f.orgId,
+        branch_id: f.branchA,
+        role: "owner",
+      });
+      expect(error, "an owner may not be scoped to one branch").not.toBeNull();
+    });
+
     it("still accepts an org-wide owner grant, whose branch_id is null", async () => {
       /*
        * The constraint that closes the hole must not close the owner case with it. MATCH SIMPLE
@@ -442,6 +464,77 @@ describeRls("row level security", () => {
         .select("user_id")
         .eq("org_id", f.orgId);
       expect(data?.map((r) => r.user_id)).toEqual([f.personas.managerA.userId]);
+    });
+  });
+
+  // ---------------------------------------------------------------- the two admin helpers
+
+  /*
+   * `signed_in_members` and `may_reissue_password` both read `auth.users` as definer functions, so
+   * each carries its whole authorization in one `where` clause. Their migrations state what those
+   * clauses prevent - "answering for any organisation to anyone who could call it" - and until now
+   * nothing checked it. Delete either line in a future `create or replace` and every other test in
+   * this repository still passes.
+   */
+  describe("signed_in_members", () => {
+    it("answers for an org you own", async () => {
+      const { data, error } = await f.personas.owner.db.rpc("signed_in_members", {
+        target_org: f.orgId,
+      });
+      expect(error?.message ?? null).toBeNull();
+      // The personas all signed in during setup, so this is everybody holding a grant.
+      expect((data as string[]).length).toBe(4);
+    });
+
+    it("tells a manager nothing about their own org", async () => {
+      // The gate is `owned_org_ids()`, not membership: a manager holds a grant here and still gets
+      // nothing, because the question is about the caller rather than about the org.
+      const { data, error } = await f.personas.managerA.db.rpc("signed_in_members", {
+        target_org: f.orgId,
+      });
+      expect(error?.message ?? null).toBeNull();
+      expect(data).toEqual([]);
+    });
+
+    it("tells an owner nothing about an organisation they do not own", async () => {
+      const { data } = await f.personas.owner.db.rpc("signed_in_members", {
+        target_org: f.otherOrgId,
+      });
+      expect(data).toEqual([]);
+    });
+  });
+
+  describe("may_reissue_password", () => {
+    it("refuses somebody who has signed in", async () => {
+      // The narrow permission this exists for is a stranded invitation. A working account is not
+      // rescued by a new password, it is taken over.
+      const { data, error } = await f.personas.owner.db.rpc("may_reissue_password", {
+        target: f.personas.staffA.userId,
+      });
+      expect(error?.message ?? null).toBeNull();
+      expect(data).toBe(false);
+    });
+
+    it("refuses an owner", async () => {
+      const { data } = await f.personas.owner.db.rpc("may_reissue_password", {
+        target: f.personas.owner.userId,
+      });
+      expect(data).toBe(false);
+    });
+
+    it("refuses somebody with no grant at all", async () => {
+      const { data } = await f.personas.owner.db.rpc("may_reissue_password", {
+        target: f.personas.outsider.userId,
+      });
+      expect(data).toBe(false);
+    });
+
+    it("refuses a manager asking about their own colleague", async () => {
+      // Same shape as above: the function is scoped to organisations the CALLER owns.
+      const { data } = await f.personas.managerA.db.rpc("may_reissue_password", {
+        target: f.personas.staffA.userId,
+      });
+      expect(data).toBe(false);
     });
   });
 

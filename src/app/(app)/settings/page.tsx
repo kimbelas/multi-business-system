@@ -3,13 +3,15 @@ import { Swatch } from "@/components/ui/swatch";
 import { requireCapability } from "@/lib/authz";
 import { businessLabel } from "@/lib/business";
 import { loadRoster } from "@/lib/roster";
+import { InviteForm } from "./invite-form";
+import { MemberActions } from "./member-actions";
 
 /**
  * Businesses, branches and people. Owner only.
  *
- * Card 0019's read half. The write half — create a branch, invite somebody, revoke a grant — is
- * not here yet, and this screen says so rather than showing buttons that do nothing: that is the
- * whole complaint the rail was just fixed for, and it would be a poor place to reintroduce it.
+ * Card 0019. Inviting somebody, issuing a new password and removing a grant all happen here;
+ * creating a business or a branch is still a database change, and the screen says so rather than
+ * showing a control that does nothing.
  *
  * `manageOrganisation` is the capability, which section 7 gives the owner alone. A staff member or
  * a manager typing this URL gets a 404 — see `lib/authz.ts` for why 404 and not 403.
@@ -31,6 +33,25 @@ export default async function SettingsPage() {
   }
 
   const branchCount = scope.businesses.reduce((n, b) => n + b.branches.length, 0);
+
+  /*
+   * Labelled with the business, because "Main branch" is the name three of them have - the bootstrap
+   * creates exactly that for laundry, spa and skin care. A select of three identical options is a
+   * choice the owner cannot actually make.
+   */
+  const branchOptions = scope.businesses
+    /*
+     * Owned organisations only. `scope.businesses` is everything RLS returned, which includes a
+     * business reachable through a plain branch grant - offering one of those is offering a choice
+     * the insert will refuse, after the account has already been created and then deleted again.
+     */
+    .filter((business) => scope.ownedOrgIds.includes(business.orgId))
+    .flatMap((business) =>
+      business.branches.map((branch) => ({
+        id: branch.id,
+        label: `${business.name} — ${branch.name}`,
+      })),
+    );
 
   return (
     <main className="mx-auto w-full max-w-3xl px-5 py-8 sm:px-6 sm:py-10">
@@ -102,14 +123,14 @@ export default async function SettingsPage() {
           </p>
         ) : roster.length === 0 ? (
           <p className="mt-3 rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
-            Nobody yet. Grants are added directly in the database until inviting is built.
+            Nobody yet. Add the first person below.
           </p>
         ) : (
           <ul className="mt-3 flex flex-col gap-2">
             {roster.map((member) => (
               <li
                 key={`${member.userId}-${member.branchId ?? "org"}`}
-                className="flex min-h-pill items-center justify-between gap-3 rounded-xl bg-card px-4 py-2.5 shadow-card"
+                className="flex min-h-pill flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-xl bg-card px-4 py-2.5 shadow-card"
               >
                 <span className="min-w-0">
                   {/*
@@ -134,18 +155,63 @@ export default async function SettingsPage() {
                       : "Whole organisation"}
                   </span>
                 </span>
-                <RoleChip role={member.role} />
+                {/*
+                 * `flex-wrap` without `flex-none`: a flex-none container's width is max-content, so
+                 * it can neither wrap nor shrink, and at 390px the chips plus two buttons measured
+                 * 358px inside a 350px row - the page scrolled sideways, which "every screen works
+                 * at 390px" forbids. Allowed to wrap onto its own line instead.
+                 */}
+                <span className="flex flex-wrap items-center justify-end gap-1.5">
+                  {/*
+                   * The unused-invitation state, which is the whole reason `signed_in_members`
+                   * exists. Muted rather than a warning tone: an invitation nobody has taken up is
+                   * a fact to notice, not a fault to fix, and the owner may have sent it an hour
+                   * ago.
+                   */}
+                  {!member.signedIn && <Chip tone="muted">Not signed in yet</Chip>}
+                  <RoleChip role={member.role} />
+                  {/*
+                   * No actions on an owner row. Both of them refuse an owner - removal because
+                   * nothing here can grant owner back, a new password because that is an account
+                   * takeover rather than a rescue - so offering them would be a button whose only
+                   * outcome is a refusal, after a confirmation dialog. `lib/rbac.ts`, first
+                   * paragraph: better never offered.
+                   */}
+                  {member.role !== "owner" && (
+                    <MemberActions
+                      membershipId={member.id}
+                      userId={member.userId}
+                      personLabel={member.name ?? "this person"}
+                      whereLabel={
+                        member.branchId
+                          ? (branchName.get(member.branchId) ?? "a branch")
+                          : "the whole organisation"
+                      }
+                    />
+                  )}
+                </span>
               </li>
             ))}
           </ul>
         )}
       </section>
 
+      <section className="mt-8">
+        <h2 className="px-1 text-sm font-medium">Add someone</h2>
+        {branchCount === 0 ? (
+          <p className="mt-3 rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+            Create a branch first &mdash; a grant names the branch it applies to.
+          </p>
+        ) : (
+          <InviteForm branches={branchOptions} />
+        )}
+      </section>
+
       <section className="mt-4 rounded-xl border border-dashed border-border p-4 sm:p-5">
-        <h2 className="text-sm font-medium">Not built yet</h2>
+        <h2 className="text-sm font-medium">Still in the database</h2>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          Creating a business or branch, inviting someone, and revoking a grant are the rest of this
-          screen. Until then those changes happen in the database.
+          Creating a business or a branch is not on this screen yet. Inviting somebody, giving them
+          a new password and removing their access are.
         </p>
       </section>
     </main>

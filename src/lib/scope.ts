@@ -32,6 +32,15 @@ export interface BranchScope {
 
 export interface BusinessScope {
   readonly id: string;
+  /**
+   * The organisation this business belongs to.
+   *
+   * Carried per business rather than inferred from `Scope.orgId`, because those are two different
+   * facts: `orgId` is "an org this person has a grant in", picked arbitrarily from an unordered
+   * query, while this is "the org this branch is actually in". A write that needs the second and
+   * uses the first is a coin flip for anybody holding grants in two organisations.
+   */
+  readonly orgId: string;
   readonly name: string;
   readonly type: BusinessType;
   readonly branches: readonly BranchScope[];
@@ -52,6 +61,15 @@ export interface Scope {
    * thing to fix if a second org ever exists rather than to paper over now.
    */
   readonly orgId: string | null;
+  /**
+   * Every organisation this person holds an org-wide owner grant in.
+   *
+   * Distinct from `orgId`, which is one arbitrary org they have any grant in, and from `isOwner`,
+   * which is a yes/no. A screen offering a branch to write to needs the list: `scope.businesses`
+   * spans everything RLS returned, including businesses reachable through a mere branch grant, and
+   * offering one of those is offering a choice the database will refuse.
+   */
+  readonly ownedOrgIds: readonly string[];
   readonly isOwner: boolean;
   /**
    * The highest role held anywhere.
@@ -94,6 +112,7 @@ interface BranchRow {
 
 interface BusinessRow {
   id: string;
+  org_id: string;
   name: string;
   type: BusinessType;
   branches: BranchRow[];
@@ -137,7 +156,7 @@ export async function loadScope(): Promise<Scope | null> {
   // (42P17), so it is covered by the persona suite.
   const { data: businessRows } = await supabase
     .from("businesses")
-    .select("id, name, type, branches (id, name, is_active)")
+    .select("id, org_id, name, type, branches (id, name, is_active)")
     .order("name");
 
   const orgId = memberships[0]?.org_id;
@@ -151,6 +170,7 @@ export async function loadScope(): Promise<Scope | null> {
 
   const businesses: BusinessScope[] = ((businessRows ?? []) as BusinessRow[]).map((business) => ({
     id: business.id,
+    orgId: business.org_id,
     name: business.name,
     type: business.type,
     branches: (business.branches ?? []).map((branch) => ({
@@ -180,6 +200,9 @@ export async function loadScope(): Promise<Scope | null> {
     displayName: (user.user_metadata?.full_name as string | undefined) ?? user.email ?? "",
     orgName: org?.name ?? null,
     orgId: orgId ?? null,
+    ownedOrgIds: memberships
+      .filter((m) => m.role === "owner" && m.branch_id === null)
+      .map((m) => m.org_id),
     isOwner,
     role: isOwner ? "owner" : highest(memberships.map((m) => m.role)),
     activeRole: activeRoleFor(memberships, chosen?.branch.id ?? null),
