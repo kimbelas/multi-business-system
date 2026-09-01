@@ -38,7 +38,11 @@ export function InviteForm({ branches }: { branches: readonly { id: string; labe
   const label = "block text-xs font-medium text-muted-foreground";
 
   return (
-    <form action={submit} className="mt-3 flex flex-col gap-3 rounded-xl bg-card p-4 shadow-card">
+    <form
+      action={submit}
+      aria-label="Invite somebody"
+      className="mt-3 flex flex-col gap-3 rounded-xl bg-card p-4 shadow-card"
+    >
       <div className="flex flex-col gap-1.5">
         <label htmlFor={emailId} className={label}>
           Email they will sign in with

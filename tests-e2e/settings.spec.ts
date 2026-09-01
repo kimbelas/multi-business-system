@@ -99,17 +99,26 @@ test.describe("the owner", () => {
      */
     await page.goto("/settings");
 
+    /*
+     * Scoped to the form, because `getByLabel(/^Name/i)` matched THREE fields on this page: the
+     * invite, "Add a business" and "Add a branch" all ask for a name. That is what the first real
+     * run of this test found, and the fix belongs partly in the app - a page carrying three unnamed
+     * forms is as ambiguous to a screen reader as it was to the locator, so each one now has an
+     * accessible name and this addresses the one it means.
+     */
+    const form = page.getByRole("form", { name: "Invite somebody" });
+
     const taken = manifest.personas.owner.email;
-    await page.getByLabel(/Email they will sign in with/i).fill(taken);
-    await page.getByLabel(/^Name/i).fill("Ana Reyes");
-    await page.getByRole("radio", { name: /Manager/ }).check();
-    await page.getByLabel(/^Branch$/i).selectOption({ index: 1 });
-    await page.getByRole("button", { name: /Create account and grant access/i }).click();
+    await form.getByLabel(/Email they will sign in with/i).fill(taken);
+    await form.getByLabel(/^Name/i).fill("Ana Reyes");
+    await form.getByRole("radio", { name: /Manager/ }).check();
+    await form.getByLabel(/^Branch$/i).selectOption({ index: 1 });
+    await form.getByRole("button", { name: /Create account and grant access/i }).click();
 
     await expect(page.getByRole("status")).toContainText(/already has an account/i);
-    await expect(page.getByLabel(/Email they will sign in with/i)).toHaveValue(taken);
-    await expect(page.getByLabel(/^Name/i)).toHaveValue("Ana Reyes");
-    await expect(page.getByRole("radio", { name: /Manager/ })).toBeChecked();
+    await expect(form.getByLabel(/Email they will sign in with/i)).toHaveValue(taken);
+    await expect(form.getByLabel(/^Name/i)).toHaveValue("Ana Reyes");
+    await expect(form.getByRole("radio", { name: /Manager/ })).toBeChecked();
   });
 
   test.describe("the remove dialog", () => {
@@ -153,6 +162,18 @@ test.describe("the owner", () => {
          * reads tokens out of `globals.css` rather than a token used as a fill in markup.
          *
          * Computed here rather than compared against a hex, so it holds if either token moves.
+         *
+         * The first version of this measurement was wrong in the worst available way. It read
+         * `getComputedStyle().color`, pulled the first three numbers out with a regex and treated
+         * them as 0-255 sRGB - and Chrome serialises a computed `oklch()` colour as
+         * `oklab(0.444 0.158 0.076)`. Every channel came out below 1, every luminance collapsed to
+         * roughly zero, and both themes reported a ratio near 1.0: light mode "failed" at 1.09,
+         * where `#991b1b` under `#fef2f2` is about 8:1. It surfaced only because the number was
+         * absurd. Had the nonsense landed above 4.5 it would have passed forever, measuring nothing.
+         *
+         * So the parsing is handed to the browser: a 1x1 canvas normalises ANY colour syntax to
+         * sRGB bytes, a sentinel catches a value it will not parse rather than silently keeping the
+         * previous fill, and the whole thing self-checks against black-on-white being 21:1.
          */
         await page.goto("/settings");
         await page.evaluate((value) => {
@@ -161,28 +182,77 @@ test.describe("the owner", () => {
         }, stored);
         await page.reload();
 
+        // Assert the theme actually took. Otherwise the dark case quietly measures the light one,
+        // and the more dangerous of the two tokens never gets looked at.
+        expect(
+          await page.evaluate(() => document.documentElement.classList.contains("dark")),
+          `the ${theme} theme should be applied to the document`,
+        ).toBe(theme === "dark");
+
         await page.getByRole("button", { name: "Remove" }).first().click();
         const confirm = page.getByRole("button", { name: "Remove access" });
         await expect(confirm).toBeVisible();
 
         const ratio = await confirm.evaluate((el) => {
-          const parse = (value: string) => {
-            const [r, g, b] = value
-              .match(/[\d.]+/g)!
-              .slice(0, 3)
-              .map(Number);
-            return [r, g, b].map((c) => {
-              const s = c / 255;
-              return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+          const canvas = document.createElement("canvas");
+          canvas.width = 1;
+          canvas.height = 1;
+          const ctx = canvas.getContext("2d")!;
+
+          /** Any CSS colour syntax in, sRGB bytes out: oklab, oklch, rgb, hex or a keyword. */
+          const bytes = (value: string): number[] => {
+            const sentinel = "#123456";
+            ctx.fillStyle = sentinel;
+            ctx.fillStyle = value;
+            if (ctx.fillStyle === sentinel && value !== sentinel) {
+              throw new Error(`the browser would not parse ${value} as a colour`);
+            }
+            ctx.clearRect(0, 0, 1, 1);
+            ctx.fillRect(0, 0, 1, 1);
+            return Array.from(ctx.getImageData(0, 0, 1, 1).data);
+          };
+
+          const lum = ([r, g, b]: number[]) => {
+            const [lr, lg, lb] = [r, g, b].map((c) => {
+              const channel = c / 255;
+              return channel <= 0.04045
+                ? channel / 12.92
+                : Math.pow((channel + 0.055) / 1.055, 2.4);
             });
+            return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
           };
-          const lum = (value: string) => {
-            const [r, g, b] = parse(value);
-            return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+          const contrast = (one: number, two: number) => {
+            const [hi, lo] = [one, two].sort((x, y) => y - x);
+            return (hi + 0.05) / (lo + 0.05);
           };
-          const style = getComputedStyle(el);
-          const [a, b] = [lum(style.color), lum(style.backgroundColor)].sort((x, y) => y - x);
-          return (a + 0.05) / (b + 0.05);
+
+          /*
+           * A self-check, because the failure this replaces was a measurement that returned a
+           * plausible-looking number instead of an error. If the arithmetic is right this is 21.
+           */
+          const known = contrast(lum(bytes("#ffffff")), lum(bytes("#000000")));
+          if (Math.abs(known - 21) > 0.01) {
+            throw new Error(`the contrast maths is broken: white on black measured ${known}`);
+          }
+
+          /*
+           * The button's own background may be transparent, and treating that as black is exactly
+           * how a bogus ratio gets manufactured. Walk up until something actually paints.
+           */
+          let node: Element | null = el;
+          let background: number[] | null = null;
+          while (node) {
+            const painted = bytes(getComputedStyle(node).backgroundColor);
+            if (painted[3] === 255) {
+              background = painted;
+              break;
+            }
+            node = node.parentElement;
+          }
+          if (!background) throw new Error("nothing above the button paints an opaque background");
+
+          return contrast(lum(bytes(getComputedStyle(el).color)), lum(background));
         });
 
         expect(ratio, `the destructive label must be readable in ${theme}`).toBeGreaterThanOrEqual(

@@ -56,11 +56,18 @@ export function CreateBusinessForm() {
   // without this a refusal empties the field it is complaining about.
   const prior = result?.submitted;
   const nameId = useId();
+  const titleId = useId();
   const typeId = useId();
 
   return (
-    <form action={action} className="flex flex-col gap-3 rounded-xl bg-card p-4 shadow-card">
-      <p className="text-sm font-medium">Add a business</p>
+    <form
+      action={action}
+      aria-labelledby={titleId}
+      className="flex flex-col gap-3 rounded-xl bg-card p-4 shadow-card"
+    >
+      <p id={titleId} className="text-sm font-medium">
+        Add a business
+      </p>
       <div className="flex flex-col gap-1.5">
         <label htmlFor={nameId} className={labelClass}>
           Name
@@ -112,13 +119,20 @@ export function CreateBranchForm({
   );
   const prior = result?.submitted;
   const nameId = useId();
+  const titleId = useId();
   const businessId = useId();
 
   if (businesses.length === 0) return null;
 
   return (
-    <form action={action} className="flex flex-col gap-3 rounded-xl bg-card p-4 shadow-card">
-      <p className="text-sm font-medium">Add a branch</p>
+    <form
+      action={action}
+      aria-labelledby={titleId}
+      className="flex flex-col gap-3 rounded-xl bg-card p-4 shadow-card"
+    >
+      <p id={titleId} className="text-sm font-medium">
+        Add a branch
+      </p>
       <div className="flex flex-col gap-1.5">
         <label htmlFor={businessId} className={labelClass}>
           Business
