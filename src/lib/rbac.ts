@@ -187,3 +187,27 @@ export function navFor(role: Role): NavItem[] {
     can(role, NAV_CAPABILITY[item]),
   );
 }
+
+/**
+ * Where a nav item actually goes, for the ones that exist.
+ *
+ * `navFor` answers "may this role reach it", which was the only question while the rail rendered
+ * inert `<span>`s. It is the wrong question on its own: the rail was offering Counter, Orders,
+ * Clients, Staff and Reports, none of which are built, so every one of those labels was a door
+ * onto nothing — the exact failure the top of this file says the file exists to prevent, arrived
+ * from the other direction. Permitted and existing are different, and until now only one was
+ * being asked.
+ *
+ * A screen joins the app by being added here. Deliberately not derived from the filesystem: a
+ * route can exist as a stub nobody should be sent to yet, and `(app)/settings` is one today.
+ */
+const NAV_HREF: Partial<Record<NavItem, string>> = {
+  Settings: "/settings",
+};
+
+/** The destinations this role can reach AND that have somewhere to go. */
+export function destinationsFor(role: Role): { item: NavItem; href: string }[] {
+  return navFor(role)
+    .filter((item) => NAV_HREF[item] !== undefined)
+    .map((item) => ({ item, href: NAV_HREF[item]! }));
+}

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/shell/app-shell";
-import { navFor } from "@/lib/rbac";
+import { destinationsFor } from "@/lib/rbac";
 import { loadScope } from "@/lib/scope";
 
 /**
@@ -11,7 +11,7 @@ import { loadScope } from "@/lib/scope";
  * assertion that the gate held - if `loadScope` ever returns null inside this group, something has
  * gone wrong upstream and the answer is the login page, not a render with `scope!` in it.
  *
- * Navigation comes from `navFor(scope.activeRole)`, so the rail cannot offer a screen the section 7
+ * Navigation comes from `destinationsFor(scope.activeRole)`, so the rail cannot offer a screen the section 7
  * matrix does not grant *at the branch being looked at*. That hides things; RLS is what enforces
  * them, and every query behind these screens is re-checked there whatever this decided to show.
  *
@@ -23,6 +23,19 @@ import { loadScope } from "@/lib/scope";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const scope = await loadScope();
   if (!scope) redirect("/login");
+
+  /*
+   * Two of these are the shell's own and not capability-gated. Today is where everybody lands, and
+   * Switch is an affordance rather than a screen a role may be denied - `loadScope` has already
+   * reduced the list to branches RLS returned, so somebody with one branch has nothing to switch
+   * between and is not offered it.
+   */
+  const branchCount = scope.businesses.reduce((n, b) => n + b.branches.length, 0);
+  const destinations = [
+    { label: "Today", href: "/" },
+    ...(branchCount > 1 ? [{ label: "Switch", href: "/switch" }] : []),
+    ...destinationsFor(scope.activeRole).map((d) => ({ label: d.item, href: d.href })),
+  ];
 
   return (
     <AppShell
@@ -37,7 +50,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       // A membership can exist with no branch reachable - an owner who has not created one yet -
       // and the shell has to say that rather than render an empty crumb.
       branchName={scope.activeBranch?.name ?? "No branch yet"}
-      nav={navFor(scope.activeRole)}
+      destinations={destinations}
     >
       {children}
     </AppShell>

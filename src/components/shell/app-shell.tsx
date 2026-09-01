@@ -1,5 +1,6 @@
 import { ChevronDown } from "lucide-react";
 
+import { NavLinks, type Destination } from "@/components/shell/nav-links";
 import { Swatch } from "@/components/ui/swatch";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { type BusinessType, businessLabel } from "@/lib/business";
@@ -39,7 +40,7 @@ export function AppShell({
   userName,
   businesses,
   branchName,
-  nav,
+  destinations,
   active,
   children,
 }: {
@@ -48,12 +49,17 @@ export function AppShell({
   userName: string;
   businesses: readonly BusinessLink[];
   branchName: string;
-  /** Derived from the role by `navFor`, never listed here - see lib/rbac.ts. */
-  nav: readonly NavItem[];
   /**
-   * Optional, and absent for now on purpose: none of these screens exist yet, so the items are
-   * labels rather than links and there is nothing to be on. When they are built this becomes a
-   * client component reading `usePathname`, rather than a prop each page remembers to pass.
+   * Where this person can actually go, from `destinationsFor` plus the two the shell owns.
+   *
+   * Was `nav: NavItem[]`, rendered as inert spans - Counter, Orders, Clients, Staff, Reports,
+   * none of which are built. Permitted and existing are different questions and only the first
+   * was being asked, so the rail offered five doors onto nothing.
+   */
+  destinations: readonly Destination[];
+  /**
+   * Only the header's title. Which nav item is CURRENT is no longer a prop: `NavLinks` reads
+   * `usePathname`, which is what the comment that used to sit here predicted.
    */
   active?: NavItem;
   children: React.ReactNode;
@@ -93,23 +99,7 @@ export function AppShell({
           </ul>
         </div>
 
-        <ul className="flex flex-col gap-0.5">
-          {nav.map((item) => (
-            <li key={item}>
-              <span
-                aria-current={item === active ? "page" : undefined}
-                className={cn(
-                  "flex h-[38px] items-center rounded-[9px] px-3 text-sm",
-                  item === active
-                    ? "bg-muted font-semibold text-foreground"
-                    : "text-muted-foreground",
-                )}
-              >
-                {item}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <NavLinks destinations={destinations} variant="rail" />
 
         <ThemeToggle className="mt-auto flex h-9 w-9 items-center justify-center rounded-[9px] text-muted-foreground hover:bg-muted" />
       </nav>
@@ -123,7 +113,7 @@ export function AppShell({
         <header className="hidden h-[60px] flex-none items-center justify-between border-b border-border bg-card px-6 sm:flex">
           <div className="flex items-center gap-2.5">
             <span className="text-[15px] font-semibold">
-              {active === "Counter" ? currentLabel : active}
+              {active === "Counter" ? currentLabel : (active ?? orgName)}
             </span>
             <span className="text-muted-foreground/70">/</span>
             <span className="text-[14.5px] text-muted-foreground">{branchName}</span>
@@ -143,6 +133,10 @@ export function AppShell({
         </header>
 
         {children}
+
+        {/* Only when there is more than one place to go: a one-item bar is a decoration that
+            costs 64px on the screen with the least of it. */}
+        {destinations.length > 1 && <NavLinks destinations={destinations} variant="bar" />}
       </div>
     </div>
   );

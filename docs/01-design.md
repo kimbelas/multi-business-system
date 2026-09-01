@@ -81,9 +81,20 @@ on tablet and desktop" means here.
    clears. That is the only desktop-only affordance in the design; the layout is the same one
    with more columns.
 
-6. **The rail is a rail only at ≥1024px.** Below that the business and branch switcher lives
-   in the top bar; below 640px the top bar collapses into the one line above the amount. Two
-   breakpoints, three arrangements, no fourth layout to maintain.
+6. **The rail is a rail only at ≥1024px, and below it navigation moves to the bottom.** Two
+   breakpoints, three arrangements, no fourth layout to maintain: a left rail from 1024; a top
+   bar plus a bottom navigation bar from 640; and below 640 the bottom bar alone, with the
+   screen naming its own branch. The bottom bar is sticky inside the content column rather than
+   fixed over it — fixed covers the last row of whatever is scrolled to — and it appears only
+   when there is more than one place to go, because a one-item bar is a decoration costing 64px
+   on the screen with the least of it.
+
+   **Navigation lists destinations that exist, not permissions.** The rail rendered
+   `navFor(role)` as inert labels — Counter, Orders, Clients, Staff, Reports — none of which are
+   built, which is five doors onto nothing on the component whose stated job is to prevent
+   exactly that. `destinationsFor` answers the second question, and a screen joins the app by
+   being added to `NAV_HREF`. Which item is current comes from `usePathname`, not from a prop
+   each page has to remember.
 
 7. **Colour identifies a business and nothing else.** A hue means the same business wherever
    you meet it — a bar segment, the share bar, a table row, the rail square. Past days in the
