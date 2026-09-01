@@ -37,8 +37,11 @@ with owner as (
   where id = (select id from auth.users where email = 'itskimmatthewbelas@gmail.com')
 ),
 org as (
-  insert into public.organizations (name, owner_id)
-  select 'Belas Group', owner.id from owner
+  -- No `owner_id`. That column was dropped by card 0033: ownership had two spellings, and the one
+  -- every policy reads is `memberships.role = 'owner'`, inserted at the bottom of this file. The CTE
+  -- above is still needed for exactly that grant.
+  insert into public.organizations (name)
+  values ('Belas Group')
   returning id
 ),
 biz as (
