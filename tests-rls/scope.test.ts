@@ -18,6 +18,19 @@ import { type Fixture, rlsEnv, setUpFixture } from "./harness";
 const env = rlsEnv();
 const describeRls = env ? describe : describe.skip;
 
+/**
+ * The name out of an embedded `profiles`, however the client decided to type it.
+ *
+ * PostgREST returns a to-one embed as an object; the untyped client infers an array, so a direct
+ * cast is a type error and an unchecked one would be a lie. `lib/roster.ts` normalises the same
+ * way at runtime, and this test asserting through the same shape is the point - if that assumption
+ * is ever wrong, both fail together rather than the test passing while the screen renders nothing.
+ */
+function embeddedName(profiles: unknown): string | undefined {
+  const one = Array.isArray(profiles) ? profiles[0] : profiles;
+  return (one as { full_name?: string } | null | undefined)?.full_name;
+}
+
 describeRls("row level security", () => {
   let f: Fixture;
 
@@ -348,6 +361,87 @@ describeRls("row level security", () => {
         target_branch: f.otherBranchId,
       });
       expect(data).toBeNull();
+    });
+  });
+
+  // ---------------------------------------------------------------- the staff roster
+
+  /*
+   * Card 0019's read half, asserted against the real project.
+   *
+   * `lib/roster.ts` claimed this suite covered it and it did not: the owner case above selects
+   * `user_id, role` with no embed, and the only embedded select anywhere in this file was
+   * businesses -> branches. That matters more than a stale comment, because the embed is exactly
+   * the landmine 20260831181029 defused once already - adding a second foreign key between two
+   * tables made PostgREST refuse to choose, `data` came back null, typecheck stayed green, and the
+   * owner's landing screen broke. That migration pre-emptively dropped `memberships_branch_id_fkey`
+   * with the note "nothing embeds these two today". Something embeds them now.
+   */
+  describe("the org roster, as the settings screen reads it", () => {
+    it("gives the owner every grant in the org, with each person's name", async () => {
+      const { data, error } = await f.personas.owner.db
+        .from("memberships")
+        .select("user_id, role, branch_id, created_at, profiles ( full_name )")
+        .eq("org_id", f.orgId)
+        .order("created_at", { ascending: false });
+
+      // A second relationship between memberships and profiles would fail here rather than in a
+      // browser, which is the whole reason this test exists.
+      expect(
+        error?.message ?? null,
+        "the profiles embed must resolve to one relationship",
+      ).toBeNull();
+      expect(data?.length, "owner, managerA, staffA, staffB").toBe(4);
+
+      for (const row of data ?? []) {
+        expect(
+          embeddedName(row.profiles),
+          `every grant should resolve a name: ${row.user_id}`,
+        ).toBeTruthy();
+      }
+    });
+
+    it("lets an owner see another owner, who names no branch", async () => {
+      /*
+       * `visible_profile_ids()` was "yourself plus colleagues at branches you can reach", and
+       * `owner_is_org_wide` forces branch_id null on an owner grant - so `null in (...)` never
+       * matched and a second owner resolved to no name at all. Nothing forbids two owners.
+       */
+      const second = await f.admin
+        .from("memberships")
+        .insert({
+          user_id: f.personas.outsider.userId,
+          org_id: f.orgId,
+          branch_id: null,
+          role: "owner",
+        })
+        .select("id")
+        .single();
+      expect(second.error?.message ?? null).toBeNull();
+
+      try {
+        const { data } = await f.personas.owner.db
+          .from("memberships")
+          .select("user_id, profiles ( full_name )")
+          .eq("org_id", f.orgId)
+          .eq("user_id", f.personas.outsider.userId)
+          .maybeSingle();
+
+        expect(embeddedName(data?.profiles), "the other owner's name should resolve").toBeTruthy();
+      } finally {
+        await f.admin.from("memberships").delete().eq("id", second.data!.id);
+      }
+    });
+
+    it("does not let a manager read the roster", async () => {
+      // The route guard refuses them first. This is what makes the refusal not the only thing
+      // standing there: `membership_owner_all` is org-wide for an owner and own-rows-only for
+      // everybody else, so a manager who reached the query sees exactly themselves.
+      const { data } = await f.personas.managerA.db
+        .from("memberships")
+        .select("user_id")
+        .eq("org_id", f.orgId);
+      expect(data?.map((r) => r.user_id)).toEqual([f.personas.managerA.userId]);
     });
   });
 

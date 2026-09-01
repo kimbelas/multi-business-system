@@ -42,6 +42,16 @@ export interface Scope {
   readonly email: string;
   readonly displayName: string;
   readonly orgName: string | null;
+  /**
+   * The organisation this person's grants belong to, or null when they hold none.
+   *
+   * Taken from the first membership row, which is exact for everybody the app currently has: an
+   * owner holds one org-wide grant by constraint, and a branch grant names the org its branch
+   * belongs to (enforced by `memberships_branch_in_org_fk`). Somebody with grants in two orgs
+   * would get an arbitrary one of them - the same limitation `orgName` already carries, and the
+   * thing to fix if a second org ever exists rather than to paper over now.
+   */
+  readonly orgId: string | null;
   readonly isOwner: boolean;
   /**
    * The highest role held anywhere.
@@ -169,6 +179,7 @@ export async function loadScope(): Promise<Scope | null> {
     email: user.email ?? "",
     displayName: (user.user_metadata?.full_name as string | undefined) ?? user.email ?? "",
     orgName: org?.name ?? null,
+    orgId: orgId ?? null,
     isOwner,
     role: isOwner ? "owner" : highest(memberships.map((m) => m.role)),
     activeRole: activeRoleFor(memberships, chosen?.branch.id ?? null),
