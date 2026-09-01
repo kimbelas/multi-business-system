@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useId, useRef } from "react";
 
 import { type ActionResult, grantOwner, reissuePassword, revokeGrant } from "./actions";
 
@@ -76,6 +76,13 @@ export function MemberActions({
     grantOwner,
     null,
   );
+  /*
+   * Each dialog is named by its own heading. Without `aria-labelledby` a `<dialog>` is announced as
+   * "dialog" with no name, and there are two of them per roster row - which is why the e2e suite had
+   * to tell them apart by a button inside them. That was the symptom; this is the cause.
+   */
+  const removeTitleId = useId();
+  const grantTitleId = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const grantDialog = useRef<HTMLDialogElement>(null);
 
@@ -103,18 +110,40 @@ export function MemberActions({
         {canReissuePassword && (
           <form action={reissue}>
             <input type="hidden" name="userId" value={userId} />
-            <button type="submit" disabled={reissuing} className={ghost}>
+            <button
+              type="submit"
+              disabled={reissuing}
+              aria-label={`Issue a new password for ${personLabel}`}
+              className={ghost}
+            >
               {reissuing ? "Setting…" : "New password"}
             </button>
           </form>
         )}
+        {/*
+         * The visible label is the verb; the accessible name says who and where.
+         *
+         * A four-person roster otherwise presents up to eight buttons called "Remove" and "Make
+         * owner" in a screen reader's button list with nothing to tell them apart - the row is a
+         * list item rather than a named region, so its context is not announced alongside them.
+         */}
         {canGrantOwner && (
-          <button type="button" onClick={() => grantDialog.current?.showModal()} className={ghost}>
+          <button
+            type="button"
+            aria-label={`Make ${personLabel} an owner of ${orgLabel}`}
+            onClick={() => grantDialog.current?.showModal()}
+            className={ghost}
+          >
             Make owner
           </button>
         )}
         {canRemove && (
-          <button type="button" onClick={() => dialog.current?.showModal()} className={ghost}>
+          <button
+            type="button"
+            aria-label={`Remove ${personLabel}'s access to ${whereLabel}`}
+            onClick={() => dialog.current?.showModal()}
+            className={ghost}
+          >
             Remove
           </button>
         )}
@@ -139,9 +168,12 @@ export function MemberActions({
 
       <dialog
         ref={dialog}
+        aria-labelledby={removeTitleId}
         className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-xl bg-card p-5 shadow-card backdrop:bg-foreground/40"
       >
-        <h2 className="text-[17px] font-semibold">Remove {personLabel}&apos;s access?</h2>
+        <h2 id={removeTitleId} className="text-[17px] font-semibold">
+          Remove {personLabel}&apos;s access?
+        </h2>
         {/*
          * "can be given access again later" was false, and not only for owner rows.
          *
@@ -219,9 +251,10 @@ export function MemberActions({
        */}
       <dialog
         ref={grantDialog}
+        aria-labelledby={grantTitleId}
         className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-xl bg-card p-5 shadow-card backdrop:bg-foreground/40"
       >
-        <h2 className="text-[17px] font-semibold">
+        <h2 id={grantTitleId} className="text-[17px] font-semibold">
           Make {personLabel} an owner of {orgLabel}?
         </h2>
         {/*
@@ -268,11 +301,26 @@ export function MemberActions({
         </div>
       </dialog>
 
-      {/* The grant's own result, in a region that exists before it has anything to say. */}
+      {/*
+       * Both confirmations' results, in a region that exists before either has anything to say.
+       *
+       * `revokeResult` was rendered NOWHERE. The action returns "Access removed." and the dialog
+       * closes on success, so the only feedback was the row disappearing - and a refusal shown inside
+       * the dialog. For anybody not watching that part of the screen, the most consequential action
+       * here was silent.
+       *
+       * Only successes: a refusal stays inside its dialog, next to the button that caused it, which
+       * is where the person is looking.
+       */}
       <p
         role="status"
-        className={grantResult?.ok ? "mt-1.5 w-full text-xs text-muted-foreground" : undefined}
+        className={
+          revokeResult?.ok || grantResult?.ok
+            ? "mt-1.5 w-full text-xs text-muted-foreground"
+            : undefined
+        }
       >
+        {revokeResult?.ok ? revokeResult.message : null}
         {grantResult?.ok ? grantResult.message : null}
       </p>
     </>

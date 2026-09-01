@@ -1,4 +1,4 @@
-import { expect, requireFixture, test } from "./authed";
+import { expect, test } from "./authed";
 
 /**
  * The shell, signed in: what the header says it is.
@@ -14,8 +14,6 @@ import { expect, requireFixture, test } from "./authed";
  * reading "Bizdesk" for somebody who does have an organisation — a null that fires when it should
  * not — and no other check in this repository would notice.
  */
-
-requireFixture();
 
 test.describe("the header", () => {
   test.use({ persona: "owner" });

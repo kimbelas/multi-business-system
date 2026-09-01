@@ -34,7 +34,17 @@ export default async function SettingsPage() {
    *
    * Null means there is no single answer, and the page says so rather than picking.
    */
-  const roster = scope.activeOrgId ? await loadRoster(scope.activeOrgId) : [];
+  /*
+   * Three outcomes, not two, and the third used to borrow the wrong sentence.
+   *
+   * `activeOrgId` is null when this person holds grants in more than one organisation and no branch
+   * is selected, so there is no single roster to show. That used to fall back to `[]`, which is
+   * indistinguishable from a successful empty read - and the screen answered it with "Nobody yet.
+   * Add the first person below.", a confident wrong sentence about an organisation full of people.
+   *
+   * `undefined` marks that case so the render can say what is actually true.
+   */
+  const roster = scope.activeOrgId ? await loadRoster(scope.activeOrgId) : undefined;
 
   /*
    * How many owners this organisation has, for the remove dialog's copy - "one of three owners; the
@@ -73,10 +83,24 @@ export default async function SettingsPage() {
      */
     .filter((business) => scope.ownedOrgIds.includes(business.orgId))
     .flatMap((business) =>
-      business.branches.map((branch) => ({
-        id: branch.id,
-        label: `${business.name} — ${branch.name}`,
-      })),
+      business.branches
+        /*
+         * Open branches only, since card 0032 made `is_active` decide reach.
+         *
+         * A grant naming a closed branch is outside `accessible_branch_ids()`, so the invite would
+         * succeed - creating a real auth user and a real grant - and the person would sign in to the
+         * "the branch you work at is closed" empty state. Both writes succeed and the result is
+         * useless, which is the worst combination available.
+         *
+         * This screen is the only one that renders the "Inactive" chip and explains what it means,
+         * so a select here that silently offered closed branches was the sharpest version of the
+         * inconsistency.
+         */
+        .filter((branch) => branch.isActive)
+        .map((branch) => ({
+          id: branch.id,
+          label: `${business.name} — ${branch.name}`,
+        })),
     );
 
   return (
@@ -86,7 +110,12 @@ export default async function SettingsPage() {
         <p className="mt-1.5 text-sm text-muted-foreground">
           {scope.activeOrgName ?? "Bizdesk"} &middot; {scope.businesses.length} businesses,{" "}
           {branchCount} branches
-          {roster !== null && `, ${roster.length} ${roster.length === 1 ? "person" : "people"}`}
+          {/*
+           * The count only when there is a roster to count. Null is a failed read and undefined is
+           * "more than one organisation, no single answer" - neither has a number, and the subtitle
+           * says nothing rather than "0 people".
+           */}
+          {roster != null && `, ${roster.length} ${roster.length === 1 ? "person" : "people"}`}
         </p>
       </header>
 
@@ -152,7 +181,18 @@ export default async function SettingsPage() {
 
       <section className="mt-8">
         <h2 className="px-1 text-sm font-medium">People</h2>
-        {roster === null ? (
+        {roster === undefined ? (
+          /*
+           * No single organisation to show a roster for - grants in two of them and no branch
+           * selected. Naming neither is the honest answer, and picking one is what `activeOrgId`
+           * exists to stop.
+           */
+          <p className="mt-3 rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+            You hold access in more than one organisation, so there is no single list of people to
+            show. Pick a branch first &mdash; the roster follows whichever organisation you are
+            working in.
+          </p>
+        ) : roster === null ? (
           /*
            * Could not load, which is a different sentence from "nobody" and used to share one.
            * A successful read always returns at least the viewer's own grant, so an empty list was
@@ -205,7 +245,14 @@ export default async function SettingsPage() {
                  * 358px inside a 350px row - the page scrolled sideways, which "every screen works
                  * at 390px" forbids. Allowed to wrap onto its own line instead.
                  */}
-                <span className="flex flex-wrap items-center justify-end gap-1.5">
+                {/*
+                 * A `div`, not a `span`. `MemberActions` renders a div, two paragraphs and two
+                 * dialogs, and flow content inside a span is invalid - browsers happen not to
+                 * reparent these the way they do a div inside a p, so it rendered and hydrated
+                 * cleanly and nothing complained. The `w-full` status paragraphs also want a block
+                 * box to be full width of.
+                 */}
+                <div className="flex flex-wrap items-center justify-end gap-1.5">
                   {/*
                    * The unused-invitation state, which is the whole reason `signed_in_members`
                    * exists. Muted rather than a warning tone: an invitation nobody has taken up is
@@ -238,7 +285,7 @@ export default async function SettingsPage() {
                     ownerCount={ownerCount}
                     {...controlsFor(roster, member, scope.userId)}
                   />
-                </span>
+                </div>
               </li>
             ))}
           </ul>

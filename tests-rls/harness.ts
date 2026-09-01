@@ -162,7 +162,14 @@ export interface Fixture {
    * org's branch" has to be true for the one caller no policy is watching.
    */
   admin: SupabaseClient;
-  teardown: () => Promise<void>;
+  /**
+   * Removes everything the fixture created, and returns what it could NOT remove.
+   *
+   * Returns rather than throws, because two callers need different things: the suite's `afterAll`
+   * asserts the list is empty, and the fixture's own rollback path cannot throw because it is
+   * already handling a failure. An empty array is the only clean outcome.
+   */
+  teardown: () => Promise<string[]>;
 }
 
 /**
@@ -189,30 +196,67 @@ export async function setUpFixture(env: RlsEnv): Promise<Fixture> {
   const createdBusinesses: string[] = [];
   const createdOrgs: string[] = [];
 
-  async function teardown() {
+  /*
+   * Every failure, collected and returned rather than thrown.
+   *
+   * Two callers need different things: the `afterAll` must be able to fail the run, and
+   * `setUpFixture`'s own rollback path cannot throw because it is already handling a failure.
+   *
+   * This did not exist until a review pointed out that the commit fixing this teardown's ORDER
+   * claimed to have fixed its error handling too. Only the order had changed - and the comment went
+   * on saying "this function discards every error it gets" in the present tense, correctly.
+   */
+  const failures: string[] = [];
+  const note = (what: string, error: { message: string } | null) => {
+    if (error) failures.push(`${what}: ${error.message}`);
+  };
+
+  async function teardown(): Promise<string[]> {
+    failures.length = 0;
+
     /*
      * The ORGANISATION first, and this order is a correction rather than a preference.
      *
      * It used to be children first - memberships, branches, businesses, then the org - which was
      * sound reasoning about foreign keys and became wrong the moment `assert_org_keeps_an_owner`
      * existed (card 0034). That trigger refuses removing an organisation's last owner row while the
-     * organisation is still there, which is exactly what "memberships first" does. Nothing leaked,
-     * because the org delete that followed cascaded everything away - but the membership delete
-     * failed silently on every single run, and this function discards every error it gets.
+     * organisation is still there, which is exactly what "memberships first" did.
      *
-     * Deleting the org is enough: `memberships.org_id`, `businesses.org_id` and
-     * `branches.business_id` are all `on delete cascade`, and the trigger deliberately exempts an
-     * organisation that no longer exists. The explicit deletes below are kept for the rows that are
-     * NOT reached that way - nothing today, and they cost one round trip each to stay honest if the
-     * schema changes.
+     * One delete is enough: `memberships.org_id`, `businesses.org_id` and `branches.business_id` are
+     * all `on delete cascade`, and the trigger deliberately exempts an organisation that no longer
+     * exists. The by-id loops over branches and businesses that used to follow are gone rather than
+     * kept "for honesty": everything they named had already cascaded, so they matched zero rows on
+     * every run - and a zero-row delete returns no error, so they could never once report anything.
+     * That is the guard-that-cannot-fire shape, and keeping it while claiming it would notice a
+     * schema change was the claim a review took apart.
      *
-     * The auth users go last: `profiles` cascades from `auth.users` and memberships reference
-     * profiles, so a user deleted while a grant still names them is the one ordering that can fail.
+     * What replaces them is a count. A delete matching zero rows succeeds, so if `createdOrgs` ever
+     * held a wrong id every delete would report clean while deleting nothing.
      */
-    for (const id of createdOrgs) await admin.from("organizations").delete().eq("id", id);
-    for (const id of createdBranches) await admin.from("branches").delete().eq("id", id);
-    for (const id of createdBusinesses) await admin.from("businesses").delete().eq("id", id);
-    for (const id of createdUsers) await admin.auth.admin.deleteUser(id);
+    for (const id of createdOrgs) {
+      const { error, count } = await admin
+        .from("organizations")
+        .delete({ count: "exact" })
+        .eq("id", id);
+      note(`organisation ${id}`, error);
+      if (!error && count !== 1) {
+        failures.push(`organisation ${id}: delete matched ${count} rows, expected 1`);
+      }
+    }
+
+    /*
+     * The auth users last: `profiles` cascades from `auth.users` and memberships reference profiles,
+     * so a user removed while a grant still names them is the one ordering here that can fail. With
+     * the organisations gone, no grant does.
+     *
+     * `deleteUser` returns `{ data, error }` and does not throw on an HTTP failure - the discarded
+     * result this project has now written down three times.
+     */
+    for (const id of createdUsers) {
+      note(`auth user ${id}`, (await admin.auth.admin.deleteUser(id)).error);
+    }
+
+    return [...failures];
   }
 
   try {
@@ -341,7 +385,16 @@ export async function setUpFixture(env: RlsEnv): Promise<Fixture> {
     };
   } catch (error) {
     // A half-built fixture still has rows in it.
-    await teardown().catch(() => {});
+    /*
+     * The fixture failed part-way. Clean up what exists, and SAY what could not be cleaned - the
+     * caller is about to see the original error, and a leak that happened while handling it would
+     * otherwise be invisible. Deliberately not thrown: the original failure is the more useful one.
+     */
+    const leaked = await teardown().catch((error: unknown) => [`teardown threw: ${String(error)}`]);
+    if (leaked.length > 0) {
+      console.error("The fixture failed and its rollback left rows behind:");
+      for (const line of leaked) console.error(`  ${line}`);
+    }
     throw error;
   }
 }

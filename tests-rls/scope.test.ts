@@ -40,7 +40,13 @@ describeRls("row level security", () => {
 
   afterAll(async () => {
     // Runs even when assertions fail, and deletes by recorded id only.
-    await f?.teardown();
+    /*
+     * A leak fails the run. The teardown returns what it could not remove rather than throwing, and
+     * for a while nothing looked at that - which meant five real auth users could stay in a real
+     * project behind a green suite.
+     */
+    const leaked = (await f?.teardown()) ?? [];
+    expect(leaked, "the fixture teardown left rows behind in a real project").toEqual([]);
   }, 120_000);
 
   // ---------------------------------------------------------------- no session

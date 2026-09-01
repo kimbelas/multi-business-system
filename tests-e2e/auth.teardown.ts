@@ -79,17 +79,26 @@ teardown("remove the personas and their organisation", async () => {
    * longer exists, and the persona suite asserts that arm precisely because this teardown depends
    * on it.
    *
-   * The explicit deletes that follow are for rows the cascade does not reach. There are none today;
-   * they cost one round trip each and would notice a schema change rather than leaking silently.
+   * The by-id loops over branches and businesses that used to follow are gone. They were kept on the
+   * argument that they "would notice a schema change rather than leaking silently", and a review
+   * took that apart: everything they named had already cascaded, so they matched zero rows every
+   * run, and a zero-row delete returns no error - so they could never report anything at all. That
+   * is the guard-that-cannot-fire shape, reintroduced by id one commit after being removed by
+   * organisation. Twice is enough.
+   *
+   * A count replaces them, and it is a stronger check than they were. A delete matching zero rows
+   * succeeds, so without this a wrong `manifest.orgId` would sail through: both deletes clean, the
+   * assertion at the end satisfied, and everything still in the project.
    */
   for (const id of [manifest.orgId, manifest.otherOrgId]) {
-    record(`organisation ${id}`, (await admin.from("organizations").delete().eq("id", id)).error);
-  }
-  for (const id of manifest.branchIds) {
-    record(`branch ${id}`, (await admin.from("branches").delete().eq("id", id)).error);
-  }
-  for (const id of manifest.businessIds) {
-    record(`business ${id}`, (await admin.from("businesses").delete().eq("id", id)).error);
+    const { error, count } = await admin
+      .from("organizations")
+      .delete({ count: "exact" })
+      .eq("id", id);
+    record(`organisation ${id}`, error);
+    if (!error && count !== 1) {
+      failures.push(`organisation ${id}: delete matched ${count} rows, expected 1`);
+    }
   }
 
   for (const id of manifest.userIds) {

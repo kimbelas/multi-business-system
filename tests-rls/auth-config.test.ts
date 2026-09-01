@@ -51,13 +51,29 @@ describeAuth("the project's auth configuration", () => {
       password: `Probe-${randomUUID()}`,
     });
 
-    /*
-     * GoTrue's wording for a disabled signup has changed across versions ("Signups not allowed for
-     * this instance", and a 422 in newer builds), so the assertion is that it refused and produced
-     * no session — not the sentence it refused with. A test pinned to the phrasing would go red on
-     * an upgrade and teach everyone to loosen it.
-     */
     expect(error, "public signup should be refused: anyone can read the anon key").not.toBeNull();
+
+    /*
+     * WHICH refusal, because two of them mean nothing here.
+     *
+     * A rate limit (429) and a server error (5xx) both produce a non-null error, a null session and a
+     * null user - satisfying every assertion below while telling us nothing about the setting under
+     * test. On a shared runner IP, or a burst of pull requests, the one check that covers the one
+     * security setting nothing else covers would pass with public signup switched on.
+     *
+     * The status is asserted and the wording is not: GoTrue has answered a disabled signup with both
+     * 400 and 422 across versions, and a test pinned to its sentence goes red on an upgrade and
+     * teaches everyone to loosen it.
+     */
+    expect(
+      error?.status,
+      `expected a refusal, got status ${error?.status}: ${error?.message}`,
+    ).toBeGreaterThanOrEqual(400);
+    expect(
+      error?.status,
+      "a rate limit or a server error is not evidence about this setting",
+    ).toBeLessThan(429);
+
     expect(data.session, "a refused signup must not hand back a session").toBeNull();
 
     /*

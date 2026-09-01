@@ -171,10 +171,16 @@ describe("the hex comments beside the tokens", () => {
     })
     .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
-  it("finds the tokens to check, so this cannot pass by matching nothing", () => {
-    // The failure shape this suite has produced before: a scan whose regex stops matching reports
-    // green forever. If the annotation style changes, this fails and says so.
-    expect(commented.length).toBeGreaterThanOrEqual(15);
+  it("finds every one of the seventeen hex-commented tokens", () => {
+    /*
+     * An exact count, not a floor. `>= 15` tolerated two tokens silently dropping out of the scan,
+     * which is precisely the failure this test exists to prevent - a regex that stops matching
+     * reports green forever.
+     *
+     * Seventeen is a fact about `globals.css`, so adding or removing an annotated token is meant to
+     * fail here and be updated deliberately.
+     */
+    expect(commented.length).toBe(17);
   });
 
   it.each(commented)("$name on line $number renders $claimed", ({ oklch, claimed }) => {

@@ -39,10 +39,20 @@ export interface RowControls {
   /**
    * Issuing a new password.
    *
-   * `may_reissue_password` permits only somebody who holds no owner grant anywhere and has never
-   * signed in. Both halves are checked here so the button is not offered where the database will
-   * refuse it — the second half is a fix in passing: it used to be offered on every non-owner row,
-   * including people who had signed in months ago.
+   * Two of the database's three conditions are checked here, and the third cannot be.
+   *
+   * `may_reissue_password` permits only somebody who has never signed in, holds no owner grant
+   * *anywhere*, and holds every one of their grants in an organisation the caller owns. This
+   * function sees one organisation's roster, so "an owner anywhere" and "no grant elsewhere" are
+   * answered from the tenancy in front of it — which is right for everybody the app has today and
+   * wrong for a person who is staff here and holds something in an organisation this owner cannot
+   * see. For them the button is offered and the RPC refuses.
+   *
+   * Not fixable here: the roster genuinely cannot see the other tenancy, and that is RLS working.
+   * Closing it means asking the database per row, which is a query per person on a render path. The
+   * honest state is that this narrows the button to the two conditions it can check, and the
+   * `signedIn` half is a fix in passing — it used to be offered on every non-owner row, including
+   * people who signed in months ago.
    */
   readonly canReissuePassword: boolean;
   /**

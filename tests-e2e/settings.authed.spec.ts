@@ -1,5 +1,5 @@
 import { contrastOf, useTheme } from "./contrast";
-import { expect, requireFixture, test } from "./authed";
+import { expect, test } from "./authed";
 
 /**
  * The staff admin, in a browser, for the first time.
@@ -13,8 +13,6 @@ import { expect, requireFixture, test } from "./authed";
  * rows in a real project, so the invite is exercised once, for the case that used to lose the
  * owner's typing; everything else asserts a property that a screenshot would not tell you.
  */
-
-requireFixture();
 
 test.describe("the owner", () => {
   test.use({ persona: "owner" });
@@ -95,8 +93,12 @@ test.describe("the owner", () => {
     /** The first non-owner row, which is the only kind that carries the controls. */
     const openDialog = async (page: import("@playwright/test").Page) => {
       await page.goto("/settings");
-      await page.getByRole("button", { name: "Remove" }).first().click();
-      const dialog = page.getByRole("dialog");
+      await page
+        .getByRole("button", { name: /^Remove .*access to / })
+        .first()
+        .click();
+      // By name, for the same reason as the grant dialog: there are two per row and both are named.
+      const dialog = page.getByRole("dialog", { name: /^Remove .*access\?$/ });
       await expect(dialog).toBeVisible();
       return dialog;
     };
@@ -135,7 +137,10 @@ test.describe("the owner", () => {
         await page.goto("/settings");
         await useTheme(page, theme);
 
-        await page.getByRole("button", { name: "Remove" }).first().click();
+        await page
+          .getByRole("button", { name: /^Remove .*access to / })
+          .first()
+          .click();
         const confirm = page.getByRole("button", { name: "Remove access" });
         await expect(confirm).toBeVisible();
 
@@ -160,11 +165,19 @@ test.describe("the owner", () => {
      */
     const openGrantDialog = async (page: import("@playwright/test").Page) => {
       await page.goto("/settings");
-      await page.getByRole("button", { name: "Make owner" }).first().click();
-      // Two dialogs exist in each row now, so the confirm button's name is what identifies this one.
-      const dialog = page
-        .getByRole("dialog")
-        .filter({ has: page.getByRole("button", { name: "Make them an owner" }) });
+      await page
+        .getByRole("button", { name: /^Make .* an owner of / })
+        .first()
+        .click();
+      /*
+       * Found by the dialog's own accessible NAME, not by a button inside it.
+       *
+       * Two dialogs live in each roster row, and this used to disambiguate them by their confirm
+       * button - which worked, and was the symptom of both `<dialog>` elements having no name at all.
+       * They are `aria-labelledby` their headings now, so this locator asserts that naming exists as
+       * a side effect of finding the thing.
+       */
+      const dialog = page.getByRole("dialog", { name: /an owner of/ });
       await expect(dialog).toBeVisible();
       return dialog;
     };
@@ -173,7 +186,11 @@ test.describe("the owner", () => {
       // Positively, before anything else asserts what the dialog says: `controlsFor` offers this once
       // per person, and if it offered it nowhere the tests below would pass by never opening.
       await page.goto("/settings");
-      await expect(page.getByRole("button", { name: "Make owner" }).first()).toBeVisible();
+      // Matched on the accessible name, which names the person and the organisation - the visible
+      // label is just the verb.
+      await expect(
+        page.getByRole("button", { name: /^Make .* an owner of / }).first(),
+      ).toBeVisible();
     });
 
     test("opens with focus on Cancel, and Escape closes it", async ({ page }) => {
@@ -213,7 +230,10 @@ test.describe("the owner", () => {
         await page.goto("/settings");
         await useTheme(page, theme);
 
-        await page.getByRole("button", { name: "Make owner" }).first().click();
+        await page
+          .getByRole("button", { name: /^Make .* an owner of / })
+          .first()
+          .click();
         const confirm = page.getByRole("button", { name: "Make them an owner" });
         await expect(confirm).toBeVisible();
 
@@ -241,7 +261,7 @@ test.describe("the owner", () => {
        */
       const row = page
         .getByRole("listitem")
-        .filter({ has: page.getByRole("button", { name: "Remove" }) })
+        .filter({ has: page.getByRole("button", { name: /^Remove .*access to / }) })
         .first();
       await expect(row).toBeVisible();
 
@@ -275,8 +295,8 @@ test.describe("the owner", () => {
     await page.goto("/settings");
     const ownerRow = page.getByRole("listitem").filter({ hasText: "Whole organisation" }).first();
     await expect(ownerRow).toBeVisible();
-    await expect(ownerRow.getByRole("button", { name: "Remove" })).toHaveCount(0);
-    await expect(ownerRow.getByRole("button", { name: "New password" })).toHaveCount(0);
+    await expect(ownerRow.getByRole("button", { name: /^Remove .*access to / })).toHaveCount(0);
+    await expect(ownerRow.getByRole("button", { name: /^Issue a new password/ })).toHaveCount(0);
   });
 });
 
