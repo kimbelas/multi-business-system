@@ -1,6 +1,6 @@
 import { test as setup, expect } from "@playwright/test";
 
-import { rlsEnv, setUpFixture, PERSONAS } from "../tests-rls/harness";
+import { rlsEnv, rlsFullyConfigured, setUpFixture, PERSONAS } from "../tests-rls/harness";
 
 import {
   authPaths,
@@ -23,18 +23,21 @@ import {
  * useless across processes - hence the manifest of ids that `auth.teardown.ts` deletes by.
  */
 
-const env = rlsEnv();
-
 setup("create personas and sign each of them in", async ({ browser }) => {
   /*
    * Skipped, not failed, when the credentials are absent - a fork with no secrets should be able to
    * run CI. The `rls` job proves the other half of this rule: where the suite is SUPPOSED to run,
    * the workflow refuses a partial credential set rather than letting it skip to green.
+   *
+   * `rlsFullyConfigured` rather than `rlsEnv() === null`, and NOT at module scope. The e2e job
+   * gives two of the three variables placeholder values so the middleware can construct a client,
+   * which makes the set partial on a fork - and `rlsEnv` throws on a partial set. At module scope
+   * that throw is a collection error: every project red, before anything runs.
    */
-  setup.skip(env === null, "needs the three Supabase credentials");
+  setup.skip(!rlsFullyConfigured(), "needs the three Supabase credentials");
   setup.setTimeout(180_000);
 
-  const fixture = await setUpFixture(env!);
+  const fixture = await setUpFixture(rlsEnv()!);
   ensureAuthDir();
 
   const personas = {} as FixtureManifest["personas"];

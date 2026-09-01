@@ -59,6 +59,25 @@ const RLS_VARS = [
  * the difference between "none" and "some" is the difference between a fork with no credentials
  * and a misconfiguration worth failing over.
  */
+/**
+ * Are all three present? Asked separately from `rlsEnv`, and not as a convenience.
+ *
+ * `rlsEnv` treats a partial set as a mistake and throws, which is right for the policy suite: those
+ * three variables are configured together or not at all. The e2e job is a different situation. It
+ * gives `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` placeholder values on
+ * purpose, because `createServerClient` in the middleware throws without two non-empty strings and
+ * the public suite reads no data - and `SUPABASE_SERVICE_ROLE_KEY` deliberately has no placeholder.
+ * So on a fork that set is *always* partial by construction, and `rlsEnv` would throw at module
+ * scope and fail the whole run for a configuration that is deliberate.
+ *
+ * The authenticated suite therefore asks this instead, and only calls `rlsEnv` once the answer is
+ * yes. A partial REAL configuration is caught where it means something: the `rls` job's preflight
+ * refuses to run on half a set.
+ */
+export function rlsFullyConfigured(): boolean {
+  return RLS_VARS.every((name) => !!process.env[name]);
+}
+
 export function rlsEnv(): RlsEnv | null {
   const missing = RLS_VARS.filter((name) => !process.env[name]);
   if (missing.length === RLS_VARS.length) return null;

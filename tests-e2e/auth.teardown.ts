@@ -3,7 +3,7 @@ import { rmSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { test as teardown } from "@playwright/test";
 
-import { rlsEnv } from "../tests-rls/harness";
+import { rlsEnv, rlsFullyConfigured } from "../tests-rls/harness";
 
 import { authPaths, readManifest } from "./authed";
 
@@ -19,16 +19,15 @@ import { authPaths, readManifest } from "./authed";
  * organisation behind is somebody's afternoon.
  */
 
-const env = rlsEnv();
-
 teardown("remove the personas and their organisation", async () => {
-  teardown.skip(env === null, "nothing was created");
+  teardown.skip(!rlsFullyConfigured(), "nothing was created");
   teardown.setTimeout(120_000);
 
   const manifest = readManifest();
   if (!manifest) return;
 
-  const admin = createClient(env!.url, env!.serviceRoleKey, {
+  const env = rlsEnv()!;
+  const admin = createClient(env.url, env.serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 

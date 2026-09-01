@@ -1,3 +1,5 @@
+import { rlsFullyConfigured } from "../tests-rls/harness";
+
 import { expect, readManifest, test } from "./authed";
 
 /**
@@ -14,11 +16,42 @@ import { expect, readManifest, test } from "./authed";
  */
 
 /*
- * Skipped, not failed, when the setup project had no credentials to create personas with - the same
- * rule `rlsEnv` carries, so a fork can run CI. Where this suite is SUPPOSED to run, the absence is
- * caught by the workflow refusing a partial credential set rather than by a green skip.
+ * The guard is a `beforeEach` hook and NOT a file-level `test.skip(...)`, which is where the first
+ * run of this suite went.
+ *
+ * A file-scope modifier is evaluated when the file is LOADED, and Playwright loads every test file
+ * to collect tests before it runs any project - including the setup project this one depends on. So
+ * the manifest was read before it had been written, all ten tests were marked skipped during
+ * collection, and CI reported `32 passed, 12 skipped` with a green tick: the setup created five auth
+ * users, signed all five in, the teardown deleted them again, and nothing in between ever ran.
+ * Verified with a two-project experiment - identical condition, identical dependency, the file-level
+ * copy skipped and the hook copy passed.
+ *
+ * A hook is evaluated per test, after the dependency has finished, which is the only time the
+ * question has an answer.
  */
-test.skip(readManifest() === null, "needs the personas the auth setup project creates");
+test.beforeEach(() => {
+  if (readManifest() !== null) return;
+
+  /*
+   * A missing manifest means the setup project skipped, and it skips for exactly one reason: it had
+   * no credentials to create personas with. So if the credentials ARE here, the absence is a
+   * failure and must not go green - that is the whole lesson of the run described above.
+   *
+   * Keyed on all three variables being present rather than on `rlsEnv`, which throws on a partial
+   * set - and the e2e job's placeholders make that set partial on a fork by design.
+   */
+  if (rlsFullyConfigured()) {
+    throw new Error(
+      "The Supabase credentials are configured, so the auth setup project should have written " +
+        `${"tests-e2e/.auth/fixture.json"}. It is absent, which means the setup did not run or ` +
+        "did not finish. These tests must not skip to green where they are supposed to run.",
+    );
+  }
+
+  // A fork with no secrets, or this machine. Skipped, not failed.
+  test.skip(true, "needs the personas the auth setup project creates");
+});
 
 test.describe("the owner", () => {
   test.use({ persona: "owner" });
