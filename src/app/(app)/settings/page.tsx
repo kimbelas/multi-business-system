@@ -26,7 +26,14 @@ export default async function SettingsPage() {
    * between - and a settings screen that took an org id from the URL would be a screen whose
    * authorization depends on a value the caller supplies.
    */
-  const roster = scope.orgId ? await loadRoster(scope.orgId) : [];
+  /*
+   * The roster is the people in ONE organisation, so it needs the one this person is in - not an
+   * arbitrary org they hold a grant in, which is what `scope.orgId` used to hand over. For a person
+   * with grants in two organisations that was a coin flip over whose staff list got shown.
+   *
+   * Null means there is no single answer, and the page says so rather than picking.
+   */
+  const roster = scope.activeOrgId ? await loadRoster(scope.activeOrgId) : [];
 
   const branchName = new Map<string, string>();
   for (const business of scope.businesses) {
@@ -65,8 +72,8 @@ export default async function SettingsPage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          {scope.orgName ?? "Bizdesk"} &middot; {scope.businesses.length} businesses, {branchCount}{" "}
-          branches
+          {scope.activeOrgName ?? "Bizdesk"} &middot; {scope.businesses.length} businesses,{" "}
+          {branchCount} branches
           {roster !== null && `, ${roster.length} ${roster.length === 1 ? "person" : "people"}`}
         </p>
       </header>

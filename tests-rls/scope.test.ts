@@ -385,6 +385,57 @@ describeRls("row level security", () => {
       expect(error?.code ?? error?.message).toBe("42703");
     });
 
+    it("gives a person with grants in two organisations reach into both, and no more", async () => {
+      /*
+       * The plan's own assumption - "one person can hold different roles at different branches" -
+       * with the branches in different tenancies. Card 0035 exists because `Scope.orgId` answered
+       * "which org is this person in" with `memberships[0].org_id` from a query with no ORDER BY,
+       * so for exactly this person it was whichever row Postgres returned first.
+       *
+       * The grant is created here and removed at the end rather than added to the fixture, on
+       * purpose. Five assertions in this suite name the exact set of people in the first org
+       * ("owner, managerA, staffA, staffB"), and a sixth persona would turn each of them into a
+       * count nobody had chosen. Its lifetime is this test.
+       */
+      const bridge = f.personas.staffB;
+      const grant = await f.admin
+        .from("memberships")
+        .insert({
+          user_id: bridge.userId,
+          org_id: f.otherOrgId,
+          branch_id: f.otherBranchId,
+          role: "staff",
+        })
+        .select("id")
+        .single();
+      expect(grant.error?.message ?? null).toBeNull();
+
+      try {
+        /*
+         * Both tenancies, through RLS, on a session that was signed in BEFORE the grant existed -
+         * which is also the proof that reach is decided per request rather than baked into a token.
+         */
+        const orgs = await bridge.db.from("organizations").select("id");
+        const ids = orgs.data?.map((row) => row.id) ?? [];
+        expect(ids).toContain(f.orgId);
+        expect(ids).toContain(f.otherOrgId);
+        expect(ids.length, "exactly the two they hold a grant in").toBe(2);
+
+        // The role is per branch, not the highest anywhere: staff in the second org, and whatever
+        // they already were in the first. Two grants, two answers, no bleed between tenancies.
+        const here = await bridge.db.rpc("role_for_branch", { target_branch: f.otherBranchId });
+        expect(here.data).toBe("staff");
+
+        // And still not an owner anywhere - a second grant widens reach, never rank.
+        const owned = await bridge.db.rpc("owned_org_ids");
+        expect(owned.data ?? []).toEqual([]);
+      } finally {
+        // In a finally, so a failed assertion above does not leave the fixture holding a grant that
+        // every later test in this file would silently inherit.
+        await f.admin.from("memberships").delete().eq("id", grant.data!.id);
+      }
+    });
+
     it("reports no role at a branch in another org", async () => {
       const { data } = await f.personas.owner.db.rpc("role_for_branch", {
         target_branch: f.otherBranchId,

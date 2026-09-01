@@ -63,7 +63,7 @@ export default defineConfig({
   projects: [
     {
       name: "public",
-      testIgnore: ["**/settings.spec.ts", "**/auth.setup.ts", "**/auth.teardown.ts"],
+      testIgnore: ["**/*.authed.spec.ts", "**/auth.setup.ts", "**/auth.teardown.ts"],
     },
     ...(DEPLOYED
       ? []
@@ -79,7 +79,10 @@ export default defineConfig({
           },
           {
             name: "authed",
-            testMatch: /settings\.spec\.ts/,
+            // A convention rather than a list of filenames: a spec that needs a session says so in
+            // its name, and the two projects cannot drift apart as files are added. The list was
+            // one rename away from silently moving a spec into the project that has no session.
+            testMatch: /\.authed\.spec\.ts$/,
             dependencies: ["auth setup"],
           },
         ]),

@@ -47,7 +47,9 @@ export default async function HomePage() {
   return (
     <main className="mx-auto w-full max-w-3xl px-5 py-8 sm:px-6 sm:py-10">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{scope.orgName ?? "Bizdesk"}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {scope.activeOrgName ?? "Bizdesk"}
+        </h1>
         <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
           <span className="truncate">{scope.displayName || scope.email}</span>
           <RoleChip role={scope.role} />

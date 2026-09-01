@@ -39,7 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <AppShell
-      orgName={scope.orgName ?? "Bizdesk"}
+      orgName={scope.activeOrgName ?? "Bizdesk"}
       roleLabel={scope.activeRole[0].toUpperCase() + scope.activeRole.slice(1)}
       userName={scope.displayName}
       businesses={scope.businesses.map((business) => ({

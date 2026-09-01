@@ -121,6 +121,14 @@ export interface Persona {
 export interface Fixture {
   runId: string;
   orgId: string;
+  /**
+   * The organisation's name as inserted.
+   *
+   * Carried rather than left for a caller to rebuild from `runId`: the e2e suite asserts the header
+   * shows this string, and two copies of `rls-test ${runId}` in two files is a rename away from a
+   * test that passes because both copies are wrong.
+   */
+  orgName: string;
   /** Business ids by type, for the three types the enum declares. */
   businesses: Record<string, string>;
   /** Two branches under the laundry business: A and B. */
@@ -228,10 +236,11 @@ export async function setUpFixture(env: RlsEnv): Promise<Fixture> {
     const org = await admin
       .from("organizations")
       .insert({ name: `rls-test ${runId}` })
-      .select("id")
+      .select("id, name")
       .single();
     if (org.error) throw new Error(`org: ${org.error.message}`);
     const orgId: string = org.data.id;
+    const orgName: string = org.data.name;
     createdOrgs.push(orgId);
 
     const businesses: Record<string, string> = {};
@@ -305,6 +314,7 @@ export async function setUpFixture(env: RlsEnv): Promise<Fixture> {
     return {
       runId,
       orgId,
+      orgName,
       businesses,
       branchA: a.id,
       branchB: b.id,

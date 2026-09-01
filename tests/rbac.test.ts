@@ -8,6 +8,7 @@ import {
   ROLES,
   type Role,
   SPEC_LABEL,
+  activeOrgIdFor,
   can,
   grant,
   navFor,
@@ -144,5 +145,59 @@ describe("navigation", () => {
       }
     }
     expect(navFor("staff")).toContain("Counter");
+  });
+});
+
+describe("activeOrgIdFor", () => {
+  const A = "11111111-1111-1111-1111-111111111111";
+  const B = "22222222-2222-2222-2222-222222222222";
+
+  /*
+   * The defect this function replaces: `Scope.orgId` was `memberships[0]?.org_id` from a query with
+   * no ORDER BY, so for a person with grants in two organisations it was whichever row Postgres
+   * returned first. Nothing a user did changed it and a plan change could.
+   */
+
+  it("takes the organisation from the active business, not from the grants", () => {
+    // Grants in both, looking at B: the answer is B, and it does not depend on the grant order.
+    expect(activeOrgIdFor([A, B], B)).toBe(B);
+    expect(activeOrgIdFor([B, A], B)).toBe(B);
+    expect(activeOrgIdFor([A, B], A)).toBe(A);
+  });
+
+  it("does not care what order the grants arrive in", () => {
+    // The property the old field failed. Same inputs, different row order, same answer - including
+    // the case with no active business, where the answer is a refusal rather than a pick.
+    expect(activeOrgIdFor([A, A, B], null)).toBe(activeOrgIdFor([B, A, A], null));
+    expect(activeOrgIdFor([A, B], null)).toBeNull();
+  });
+
+  it("answers with the only organisation when there is exactly one", () => {
+    // An owner who has created no business yet has nothing to derive from, and one grant leaves
+    // nothing to be arbitrary about. Duplicates are one organisation, not two.
+    expect(activeOrgIdFor([A], null)).toBe(A);
+    expect(activeOrgIdFor([A, A, A], null)).toBe(A);
+  });
+
+  it("refuses to guess between two, and says so with null", () => {
+    // Null is the honest answer to "which of these two", and the caller falls back to the product
+    // name rather than naming somebody's other tenancy.
+    expect(activeOrgIdFor([A, B], null)).toBeNull();
+  });
+
+  it("returns null for somebody with no grants at all", () => {
+    expect(activeOrgIdFor([], null)).toBeNull();
+  });
+
+  it("trusts the active business even when no grant names its organisation", () => {
+    /*
+     * Deliberate, and worth stating because it looks wrong. `scope.businesses` is what RLS
+     * returned, so a business being there is already proof of reach - re-deriving permission from
+     * the grant list here would be a second authorization layer in the wrong place, and one that
+     * disagrees with the database is worse than none.
+     *
+     * This is a display and lookup value. Everything that WRITES goes through `ownedOrgIds`.
+     */
+    expect(activeOrgIdFor([A], B)).toBe(B);
   });
 });

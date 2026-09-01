@@ -60,6 +60,7 @@ setup("create personas and sign each of them in", async ({ browser }) => {
   writeManifest({
     runId: fixture.runId,
     orgId: fixture.orgId,
+    orgName: fixture.orgName,
     branchA: fixture.branchA,
     branchB: fixture.branchB,
     otherOrgId: fixture.otherOrgId,

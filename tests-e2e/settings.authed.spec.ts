@@ -1,6 +1,4 @@
-import { rlsFullyConfigured } from "../tests-rls/harness";
-
-import { expect, readManifest, stateExists, test } from "./authed";
+import { expect, requireFixture, test } from "./authed";
 
 /**
  * The staff admin, in a browser, for the first time.
@@ -15,62 +13,7 @@ import { expect, readManifest, stateExists, test } from "./authed";
  * owner's typing; everything else asserts a property that a screenshot would not tell you.
  */
 
-/*
- * The guard is a `beforeEach` hook and NOT a file-level `test.skip(...)`, which is where the first
- * run of this suite went.
- *
- * A file-scope modifier is evaluated when the file is LOADED, and Playwright loads every test file
- * to collect tests before it runs any project - including the setup project this one depends on. So
- * the manifest was read before it had been written, all ten tests were marked skipped during
- * collection, and CI reported `32 passed, 12 skipped` with a green tick: the setup created five auth
- * users, signed all five in, the teardown deleted them again, and nothing in between ever ran.
- * Verified with a two-project experiment - identical condition, identical dependency, the file-level
- * copy skipped and the hook copy passed.
- *
- * A hook is evaluated per test, after the dependency has finished, which is the only time the
- * question has an answer.
- */
-test.beforeEach(({ persona }) => {
-  /*
-   * The credentials decide first, and nothing else does.
-   *
-   * Keyed on all three variables being present rather than on `rlsEnv`, which throws on a partial
-   * set - and the e2e job's placeholders make that set partial on a fork by design.
-   *
-   * Asking the credentials BEFORE the manifest also settles a case the previous order got wrong.
-   * `tests-e2e/.auth` survives any run where the credentials are absent, because both the setup and
-   * the teardown skip before touching it - so on a machine that once had them, a stale manifest
-   * would satisfy the guard and these ten tests would run against accounts that no longer exist.
-   * Nine would fail confusingly and one would pass, which is this commit's own defect inverted.
-   */
-  if (!rlsFullyConfigured()) {
-    test.skip(true, "needs the personas the auth setup project creates");
-    return;
-  }
-
-  /*
-   * From here the setup project must have produced both artefacts, so their absence is a failure
-   * and must not go green - the whole lesson of the run described above.
-   *
-   * Both, not just the manifest. They are written at different times: the manifest before any
-   * sign-in, each `<persona>.json` after that persona's. So a present manifest is not evidence
-   * that THIS test's browser has a session, and `authed.ts` falls back to no session rather than
-   * throwing when the state file is missing.
-   */
-  if (readManifest() === null) {
-    throw new Error(
-      "The Supabase credentials are configured, so the auth setup project should have written " +
-        "tests-e2e/.auth/fixture.json. It is absent, which means the setup did not run or did " +
-        "not finish. These tests must not skip to green where they are supposed to run.",
-    );
-  }
-  if (!stateExists(persona)) {
-    throw new Error(
-      `The fixture exists but tests-e2e/.auth/${persona}.json does not, so this test would run ` +
-        "with no session and assert against the login page instead.",
-    );
-  }
-});
+requireFixture();
 
 test.describe("the owner", () => {
   test.use({ persona: "owner" });

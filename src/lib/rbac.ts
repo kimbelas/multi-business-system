@@ -139,6 +139,46 @@ export interface MembershipGrant {
 }
 
 /**
+ * Which organisation the person is currently *in*, deterministically.
+ *
+ * This replaces `Scope.orgId`, which was `memberships[0]?.org_id` from a query with no `ORDER BY`.
+ * Its own docstring admitted what that meant - "one arbitrary org they have any grant in" - and for
+ * anybody holding grants in two organisations it was whichever row Postgres happened to return
+ * first, which changes with a plan change rather than with anything a user did.
+ *
+ * Three callers had each been made safe against it separately: `inviteStaff` derives the org from
+ * the chosen branch, `createBusiness` selects from `ownedOrgIds`, `loadRoster` checks the caller's
+ * own presence in the result. Three fixes, one cause - and the next caller would have started from
+ * the trap rather than from the fix.
+ *
+ * The rules, in order, and the ordering is the substance:
+ *
+ *  1. **The active business decides.** If a branch is selected, the organisation is the one that
+ *     branch's business belongs to. Not "an org with a grant" but "the tenancy this person is
+ *     looking at", which is the question every caller was actually asking, and it follows the
+ *     switcher rather than the database's row order.
+ *  2. **No active business, exactly one organisation: that one.** An owner who has created nothing
+ *     yet has no business to derive from, and a single grant leaves nothing to be arbitrary about.
+ *  3. **Otherwise null**, which happens for somebody with no grants at all and for somebody with
+ *     grants in two organisations and no branch selected. Null is the honest answer: the caller is
+ *     asking which of two, and guessing is what this function exists to stop. Screens fall back to
+ *     the product name; anything that WRITES uses `ownedOrgIds` and names its own target.
+ *
+ * Pure and here rather than in `lib/scope.ts` for the same reason `activeRoleFor` is: that module
+ * carries `import "server-only"`, so nothing in it can be unit tested, and this is a rule rather
+ * than a query.
+ */
+export function activeOrgIdFor(
+  grantedOrgIds: readonly string[],
+  activeBusinessOrgId: string | null,
+): string | null {
+  if (activeBusinessOrgId !== null) return activeBusinessOrgId;
+
+  const distinct = [...new Set(grantedOrgIds)];
+  return distinct.length === 1 ? distinct[0] : null;
+}
+
+/**
  * The role that applies where the person is currently looking.
  *
  * The two fallbacks differ on purpose, and that is the whole substance of this function:
