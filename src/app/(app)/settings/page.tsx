@@ -115,6 +115,19 @@ export default async function SettingsPage() {
                   ))}
                 </ul>
               )}
+              {/*
+               * What the chip means, said once and only when one is on screen.
+               *
+               * Since card 0032 the chip is not decoration - a closed branch is out of reach for
+               * every grant except an owner's. This is the only screen where somebody sees a closed
+               * branch at all, precisely because they are the person who can reopen it, so it is the
+               * only screen where the word needs explaining.
+               */}
+              {business.branches.some((branch) => !branch.isActive) && (
+                <p className="mt-2 px-1 text-[13px] text-muted-foreground">
+                  A closed branch stays visible to you and is out of reach for everyone else.
+                </p>
+              )}
             </div>
           ))}
         </div>

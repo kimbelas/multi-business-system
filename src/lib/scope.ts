@@ -70,6 +70,20 @@ export interface Scope {
   readonly ownedOrgIds: readonly string[];
   readonly isOwner: boolean;
   /**
+   * Whether this person holds any grant at all.
+   *
+   * Not derivable from anything else here, which is why it exists. `businesses` being empty has
+   * three different causes - no grant anywhere, an owner who has created nothing yet, and somebody
+   * whose only branch is closed - and `role` cannot tell them apart because it falls back to
+   * "staff" for a person with no grants at all. The empty state used to name one cause for all
+   * three and told an owner with no businesses to "ask the owner to add you".
+   *
+   * True is a fact about grants, not about reach: a staff member at a closed branch holds a grant
+   * and reaches nothing. `membership_self_read` is what makes it knowable - it returns your own
+   * rows regardless of whether the branch they name is still open.
+   */
+  readonly hasAnyGrant: boolean;
+  /**
    * The highest role held anywhere.
    *
    * **Not what navigation derives from** - see `activeRole`. This is "what is this person, in
@@ -209,6 +223,7 @@ export async function loadScope(): Promise<Scope | null> {
       .filter((m) => m.role === "owner" && m.branch_id === null)
       .map((m) => m.org_id),
     isOwner,
+    hasAnyGrant: memberships.length > 0,
     role: isOwner ? "owner" : highest(memberships.map((m) => m.role)),
     activeRole: activeRoleFor(memberships, chosen?.branch.id ?? null),
     businesses,

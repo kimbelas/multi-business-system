@@ -655,6 +655,116 @@ describeRls("row level security", () => {
    * There was no negative case either, on an action that compiles to a POST endpoint any signed-in
    * person can reach.
    */
+  describe("a closed branch", () => {
+    /*
+     * Card 0032. `is_active` used to be invisible to every policy: the chip said "Inactive" and
+     * `accessible_branch_ids()` returned the branch anyway, so staff kept reaching a branch the
+     * owner believed was shut. These are the assertions that make the word mean something.
+     *
+     * Deliberately the same before-and-after shape as the revoke test above, because it is the same
+     * claim - reach is decided per request, not at sign-in - and the two would drift apart if only
+     * one of them proved it.
+     */
+
+    /** Closed, the body runs, reopened - even if the body throws. */
+    const whileClosed = async (
+      table: "branches" | "businesses",
+      id: string,
+      body: () => Promise<void>,
+    ) => {
+      const closed = await f.admin.from(table).update({ is_active: false }).eq("id", id);
+      expect(closed.error?.message ?? null).toBeNull();
+      try {
+        await body();
+      } finally {
+        /*
+         * In a `finally`, and this one matters more than most: leaving the fixture's only staff
+         * branch closed would not fail the next test, it would change what the next test means.
+         * Every later assertion about staffA's reach would pass for the wrong reason.
+         */
+        const reopened = await f.admin.from(table).update({ is_active: true }).eq("id", id);
+        expect(reopened.error?.message ?? null).toBeNull();
+      }
+    };
+
+    it("stops being reachable by the staff member who works there", async () => {
+      // Before: the whole point of asserting it, so a policy that returns nothing for an unrelated
+      // reason cannot pass this test.
+      const before = await f.personas.staffA.db.from("branches").select("id").eq("id", f.branchA);
+      expect(before.data?.map((row) => row.id)).toEqual([f.branchA]);
+
+      await whileClosed("branches", f.branchA, async () => {
+        const during = await f.personas.staffA.db.from("branches").select("id").eq("id", f.branchA);
+        expect(during.data, "a closed branch is out of reach for a branch grant").toEqual([]);
+
+        // And the role function agrees, which is the half that decides what the shell offers. If
+        // these two disagreed, navigation would be derived from a role at an unreachable branch.
+        const role = await f.personas.staffA.db.rpc("role_for_branch", {
+          target_branch: f.branchA,
+        });
+        expect(role.data).toBeNull();
+      });
+
+      // After: reopening restores it, so this is a door rather than a one-way trip.
+      const after = await f.personas.staffA.db.from("branches").select("id").eq("id", f.branchA);
+      expect(after.data?.map((row) => row.id)).toEqual([f.branchA]);
+    });
+
+    it("stays reachable by the owner, who is the one who can reopen it", async () => {
+      /*
+       * The other half of the decision, and the reason the owner arm of `accessible_branch_ids()`
+       * was left alone. A soft delete you cannot see is a hard delete with extra steps - whoever
+       * closed the branch has to be able to find it again.
+       */
+      await whileClosed("branches", f.branchA, async () => {
+        const seen = await f.personas.owner.db.from("branches").select("id").eq("id", f.branchA);
+        expect(seen.data?.map((row) => row.id)).toEqual([f.branchA]);
+
+        const role = await f.personas.owner.db.rpc("role_for_branch", {
+          target_branch: f.branchA,
+        });
+        expect(role.data).toBe("owner");
+      });
+    });
+
+    it("keeps the staff member's own grant readable, so the app can say why", async () => {
+      /*
+       * `membership_self_read` is `user_id = auth.uid()` and does not go through
+       * `accessible_branch_ids()`, which is what makes the screen able to tell "your branch is
+       * closed" apart from "you have no access at all". Asserted because the empty state on `/`
+       * now depends on it: `scope.hasAnyGrant` is this query.
+       */
+      await whileClosed("branches", f.branchA, async () => {
+        const grants = await f.personas.staffA.db.from("memberships").select("id, branch_id");
+        expect(grants.data?.length, "their own grant row survives the branch closing").toBe(1);
+        expect(grants.data?.[0].branch_id).toBe(f.branchA);
+      });
+    });
+
+    it("closes every branch under a closed business", async () => {
+      /*
+       * Otherwise `businesses.is_active` stays decorative, which is the same defect this card is
+       * about, one table up. The branch itself is untouched here - only its business is closed - so
+       * this fails if the join was written against the branch flag twice.
+       */
+      const businessId = f.businesses.laundry;
+
+      await whileClosed("businesses", businessId, async () => {
+        const branches = await f.personas.staffA.db
+          .from("branches")
+          .select("id")
+          .eq("id", f.branchA);
+        expect(branches.data, "a branch under a closed business is closed too").toEqual([]);
+
+        const business = await f.personas.staffA.db
+          .from("businesses")
+          .select("id")
+          .eq("id", businessId);
+        expect(business.data).toEqual([]);
+      });
+    });
+  });
+
   describe("creating a business", () => {
     it("is allowed for the owner, through RLS", async () => {
       const created = await f.personas.owner.db

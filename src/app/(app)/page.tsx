@@ -58,20 +58,36 @@ export default async function HomePage() {
 
       {scope.businesses.length === 0 && (
         /*
-         * Not a generic empty state. An account with no membership signs in perfectly and reads
-         * nothing, because owned_org_ids() is empty - so this names that cause rather than implying
-         * the data does not exist. `tests-rls/scope.test.ts` covers the same case as the
-         * `outsider` persona.
+         * Three causes, three messages. Not a generic empty state, and not one message for all of
+         * them either - which is what this was, and it told an owner who had created no businesses
+         * yet to "ask the owner to add you".
          *
-         * It says what to do rather than what went wrong, because nothing went wrong: the person
-         * reading it cannot fix it themselves and needs to know who can.
+         * The third cause arrived with card 0032: `is_active` now decides reach, so a staff member
+         * whose only branch is closed holds a grant and reaches nothing. `membership_self_read`
+         * still returns their own row, which is what makes that case distinguishable from having no
+         * grant at all - see `hasAnyGrant`.
+         *
+         * Each one says what to do rather than what went wrong, because nothing went wrong: none of
+         * these people can fix it themselves and each needs to know who can.
          */
         <div className="mt-8 rounded-xl border border-dashed border-border p-5">
           <p className="font-medium">Nothing to show yet</p>
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            Your account is not attached to a business. Ask the owner to add you, then sign in
-            again.
-          </p>
+          {!scope.hasAnyGrant ? (
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              Your account is not attached to a business. Ask the owner to add you, then sign in
+              again.
+            </p>
+          ) : scope.isOwner ? (
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              You have not added a business yet. Settings is where businesses and branches are
+              created.
+            </p>
+          ) : (
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              The branch you work at is closed, so there is nothing to record against it. Ask the
+              owner to reopen it or to move you to another branch.
+            </p>
+          )}
         </div>
       )}
 
