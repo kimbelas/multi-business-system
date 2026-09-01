@@ -177,21 +177,25 @@ export function MemberActions({
         {/*
          * "can be given access again later" was false, and not only for owner rows.
          *
-         * Nothing in this app grants a role to an account that already exists: `inviteStaff` creates
-         * the account first and, on a duplicate email, answers "Grant them access instead of inviting
-         * them again" - pointing at a control that does not exist. So removing somebody's ONLY grant
-         * here cannot be undone from this screen, and the dialog said it could.
+         * When this was written, nothing in the app granted a role to an existing account: `inviteStaff`
+         * created the account first and, on a duplicate email, answered "Grant them access instead of
+         * inviting them again" - pointing at a control that did not exist. So removing somebody's ONLY
+         * grant could not be undone from this screen, and the dialog said it could.
          *
-         * It now says which of the two situations this is. The follow-up that would make the cheerful
-         * version true is its own card: grant a role to an existing account, which is the same insert
-         * `grantOwner` performs with a role and a branch instead of owner and null.
+         * Card 0040 built that control, so the sentence changed again - and this is the interesting
+         * part: the version written for THIS card ("nothing on this screen can give it back, because
+         * their email address is already taken") became false the moment 0040 shipped. A truthful
+         * sentence about a missing feature is a lie the day the feature arrives, which is why 0040's
+         * own criteria included coming back here.
+         *
+         * It now says how to give it back, rather than either promising vaguely or refusing to.
          */}
         <p className="mt-2 text-[14.5px] text-muted-foreground">
           They lose access to <span className="text-foreground">{whereLabel}</span> immediately.
           {ownerRow
             ? ` Removing an owner takes away everything they can see and do in ${orgLabel}. They are one of ${ownerCount} owners; the last one cannot be removed.`
             : lastGrantHere
-              ? " They keep their account, but this is their only access here — and nothing on this screen can give it back, because their email address is already taken."
+              ? " They keep their account, and this is their only access here — to give it back, use the invite form with the same email address and it will offer to grant this account instead of creating a new one."
               : " They keep their account and their other access here."}
         </p>
 
