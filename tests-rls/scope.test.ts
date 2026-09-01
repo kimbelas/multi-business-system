@@ -982,6 +982,132 @@ describeRls("row level security", () => {
     });
   });
 
+  describe("grant_existing_by_email", () => {
+    /*
+     * Card 0040. The function exists because app code cannot turn an email address into a user id -
+     * `profiles` holds no email and `auth.users` is not reachable through PostgREST - and returning
+     * that id would be a standing oracle over every account in the system. So it does the whole
+     * operation and answers with a status.
+     *
+     * These assertions are about what it REFUSES, since that is the security surface. The enumeration
+     * it deliberately allows - an owner learning that an address exists by granting it access - is a
+     * decision recorded in the log, not a defect to test around.
+     */
+    const rpc = (persona: keyof Fixture["personas"], email: string, branch: string, role: string) =>
+      f.personas[persona].db.rpc("grant_existing_by_email", {
+        target_email: email,
+        target_branch: branch,
+        target_role: role,
+      });
+
+    it("grants a staff role to an existing account, through the owner's session", async () => {
+      // `outsider` is a real account with no grant anywhere - exactly the person the card exists for,
+      // somebody whose only handle is their email address.
+      const granted = await rpc("owner", f.personas.outsider.email, f.branchA, "staff");
+      expect(granted.error?.message ?? null).toBeNull();
+      expect(granted.data).toBe("granted");
+
+      try {
+        // And it is real reach immediately, on a session signed in before the grant existed.
+        const branches = await f.personas.outsider.db.from("branches").select("id");
+        expect(branches.data?.map((row) => row.id)).toEqual([f.branchA]);
+
+        // Saying it twice is not an error, and not a second row.
+        const again = await rpc("owner", f.personas.outsider.email, f.branchA, "staff");
+        expect(again.data).toBe("already_has_it");
+      } finally {
+        const removed = await f.admin
+          .from("memberships")
+          .delete({ count: "exact" })
+          .eq("user_id", f.personas.outsider.userId)
+          .eq("branch_id", f.branchA);
+        expect(removed.error?.message ?? null).toBeNull();
+        expect(removed.count).toBe(1);
+      }
+    });
+
+    it("is case-insensitive about the address", async () => {
+      // GoTrue lowercases on signup; an owner typing into a form does not.
+      const granted = await rpc(
+        "owner",
+        f.personas.outsider.email.toUpperCase(),
+        f.branchB,
+        "staff",
+      );
+      expect(granted.data).toBe("granted");
+      await f.admin
+        .from("memberships")
+        .delete()
+        .eq("user_id", f.personas.outsider.userId)
+        .eq("branch_id", f.branchB);
+    });
+
+    it("refuses a manager and refuses staff, whatever they type", async () => {
+      /*
+       * The whole function is gated on `owned_org_ids()`, so somebody who owns nothing gets `refused`
+       * for every input - which also means they cannot use it to probe for accounts. Asserted for both
+       * non-owner roles because "manager" is the one that manages a branch and would be the plausible
+       * mistake to make.
+       */
+      for (const persona of ["managerA", "staffA"] as const) {
+        const attempt = await rpc(persona, f.personas.outsider.email, f.branchA, "staff");
+        expect(attempt.error?.message ?? null).toBeNull();
+        expect(attempt.data, `${persona} must not be able to grant access`).toBe("refused");
+      }
+
+      // Nothing was created by any of those attempts.
+      const grants = await f.admin
+        .from("memberships")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", f.personas.outsider.userId);
+      expect(grants.count).toBe(0);
+    });
+
+    it("refuses a branch in an organisation the caller does not own", async () => {
+      // The cross-tenant case, which is the one that would matter most. `otherBranchId` belongs to an
+      // organisation the owner persona holds no grant in at all.
+      const attempt = await rpc("owner", f.personas.outsider.email, f.otherBranchId, "staff");
+      expect(attempt.data).toBe("refused");
+    });
+
+    it("refuses the owner role rather than creating a branch-scoped owner", async () => {
+      /*
+       * An owner grant is org-wide by constraint, so it has no branch to be scoped to - card 0034 owns
+       * that path, with a confirmation that says what is being handed over. Refused before the address
+       * is even looked up, so probing with `owner` reveals nothing about it.
+       */
+      const attempt = await rpc("owner", f.personas.outsider.email, f.branchA, "owner");
+      expect(attempt.data).toBe("refused");
+    });
+
+    it("says no_account for an address nobody has", async () => {
+      const attempt = await rpc("owner", `nobody-${f.runId}@example.com`, f.branchA, "staff");
+      expect(attempt.data).toBe("no_account");
+    });
+
+    it("refuses a closed branch", async () => {
+      /*
+       * Since card 0032 a grant naming a closed branch reaches nothing, so creating one would be a
+       * write that succeeds and achieves nothing - the same defect the invite form's branch list had.
+       */
+      const closed = await f.admin
+        .from("branches")
+        .update({ is_active: false })
+        .eq("id", f.branchB);
+      expect(closed.error?.message ?? null).toBeNull();
+      try {
+        const attempt = await rpc("owner", f.personas.outsider.email, f.branchB, "staff");
+        expect(attempt.data).toBe("refused");
+      } finally {
+        const reopened = await f.admin
+          .from("branches")
+          .update({ is_active: true })
+          .eq("id", f.branchB);
+        expect(reopened.error?.message ?? null).toBeNull();
+      }
+    });
+  });
+
   describe("creating a business", () => {
     it("is allowed for the owner, through RLS", async () => {
       const created = await f.personas.owner.db

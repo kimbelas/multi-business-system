@@ -37,6 +37,14 @@ import { createClient } from "@/lib/supabase/server";
  */
 
 export interface ActionResult {
+  /**
+   * Set when the address is taken and the owner can grant that account access instead.
+   *
+   * Card 0040. The invite's refusal used to say "Grant them access instead of inviting them again"
+   * and point at nothing. This is what makes that sentence true, and it is a flag rather than a
+   * message so the form decides how to offer it.
+   */
+  readonly canGrantExisting?: boolean;
   ok: boolean;
   message: string;
   /**
@@ -141,12 +149,23 @@ export async function inviteStaff(
   if (created.error) {
     // The common case is a duplicate, and saying so is more useful than the raw message.
     const duplicate = /already|exists|registered/i.test(created.error.message);
-    return fail(
-      duplicate
-        ? "Somebody already has an account with that email. Grant them access instead of inviting them again."
-        : `Could not create the account: ${created.error.message}`,
-      submitted,
-    );
+    if (duplicate) {
+      /*
+       * The refusal now carries an offer rather than an instruction nobody could follow. It used to
+       * end "Grant them access instead of inviting them again" and point at a control that did not
+       * exist - card 0040.
+       *
+       * An offer and not an automatic grant: the owner may simply have mistyped, and granting on a
+       * typo would hand a stranger access to their branch with nothing to notice.
+       */
+      return {
+        ok: false,
+        message: "That address already has an account, so no new one was created.",
+        submitted,
+        canGrantExisting: true,
+      };
+    }
+    return fail(`Could not create the account: ${created.error.message}`, submitted);
   }
 
   const userId = created.data.user?.id;
@@ -521,6 +540,101 @@ export async function reissuePassword(
  * `org_id` is derived by a trigger from its business rather than supplied, so there is nothing for
  * a caller to get wrong or to forge.
  */
+/**
+ * Give an account that already exists a role at a branch. Card 0040.
+ *
+ * Reached from the invite form's refusal, not from the roster. That is not a layout preference: the
+ * case this exists for is somebody whose last grant was removed, and such a person is NOT on the
+ * roster, because the roster is a list of grants. The only handle anybody has on them is the email
+ * address the owner types.
+ *
+ * ## It is a second step, deliberately
+ *
+ * The invite could simply grant instead of refusing when the address is taken. It does not, because
+ * an owner who mistypes an address would then hand a stranger access to their branch with no way to
+ * notice. So the refusal offers, and this action is the answer to that offer - the owner sees which
+ * role and which branch before anything happens.
+ *
+ * ## What it can and cannot see
+ *
+ * Everything happens inside `grant_existing_by_email`, which returns a status rather than a user id.
+ * The action never learns who the account belongs to and cannot show their name beforehand: they hold
+ * no grant in this organisation yet, so `visible_profile_ids()` does not include them, and that is
+ * correct rather than inconvenient. After the grant they appear on the roster like anybody else.
+ */
+export async function grantExistingAccount(
+  _prev: ActionResult | null,
+  form: FormData,
+): Promise<ActionResult> {
+  const scope = await requireCapability("manageOrganisation");
+
+  const email = String(form.get("email") ?? "")
+    .trim()
+    .toLowerCase();
+  const role = String(form.get("role") ?? "");
+  const branchId = String(form.get("branchId") ?? "");
+  const submitted = { email, name: "", role, branchId };
+
+  if (!email) return fail("Type the email address again.", submitted);
+  if (!(INVITABLE as readonly string[]).includes(role))
+    return fail("Choose manager or staff.", submitted);
+
+  /*
+   * The branch is checked against what RLS returned before the RPC is called, so an owner gets a
+   * sentence about the branch rather than a bare `refused` from the database. The function checks it
+   * again and is the thing that decides - this is the message, not the guard.
+   */
+  const reachable = scope.businesses
+    .flatMap((business) => business.branches.map((branch) => ({ branch, business })))
+    .find((entry) => entry.branch.id === branchId);
+  if (!reachable) return fail("Choose a branch.", submitted);
+  if (!scope.ownedOrgIds.includes(reachable.business.orgId))
+    return fail("You do not own that branch's organisation.", submitted);
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("grant_existing_by_email", {
+    target_email: email,
+    target_branch: branchId,
+    target_role: role,
+  });
+
+  if (error) {
+    /*
+     * 23505 is `unique (user_id, org_id, branch_id)`: they already hold a DIFFERENT role at that
+     * branch, which the function's own "already has it" check does not cover because it looks for the
+     * exact role. Two different answers, and the owner needs to know which.
+     */
+    if (error.code === "23505") {
+      return fail(
+        "They already have a different role at that branch. Remove that first if you mean to " +
+          "change it.",
+        submitted,
+      );
+    }
+    return fail(`Could not grant access: ${error.message}`, submitted);
+  }
+
+  const outcome = String(data ?? "");
+  if (outcome === "no_account") {
+    return fail(
+      "There is no account with that address after all — invite them instead.",
+      submitted,
+    );
+  }
+  if (outcome === "already_has_it") {
+    return fail("They already have that access.", submitted);
+  }
+  if (outcome !== "granted") {
+    return fail("That grant was refused. Check the branch is open and yours.", submitted);
+  }
+
+  revalidatePath("/settings");
+  return {
+    ok: true,
+    message: `Access granted at ${reachable.branch.name}. They can sign in with the password they already have.`,
+  };
+}
+
 export async function createBusiness(
   _prev: ActionResult | null,
   form: FormData,
