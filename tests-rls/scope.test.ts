@@ -467,6 +467,166 @@ describeRls("row level security", () => {
     });
   });
 
+  // ---------------------------------------------------------------- revoking
+
+  /*
+   * Card 0019: "Revoking a membership removes that person's access at the database, verified by a
+   * persona test rather than by the navigation disappearing."
+   *
+   * The navigation disappearing proves only that a component read a smaller list. This asserts the
+   * thing underneath: the same signed-in session, reading the same table, before and after.
+   *
+   * Built on the outsider rather than on an existing persona, so the fixture's four grants are
+   * still four when the next test runs - and the outsider is the one persona whose baseline is
+   * already "reads nothing", which makes the before-and-after unambiguous.
+   */
+  describe("a revoked grant", () => {
+    it("takes the branch away from a session that is already signed in", async () => {
+      const granted = await f.admin
+        .from("memberships")
+        .insert({
+          user_id: f.personas.outsider.userId,
+          org_id: f.orgId,
+          branch_id: f.branchA,
+          role: "staff",
+        })
+        .select("id")
+        .single();
+      expect(granted.error?.message ?? null).toBeNull();
+
+      /*
+       * The cleanup is in a `finally`, and that is not tidiness.
+       *
+       * Without it, an assertion failing between the insert and the delete leaves the grant behind
+       * for the rest of the run: `signed_in_members` then counts five where it expects four, and
+       * `may_reissue_password` still passes but for the signed-in reason rather than the no-grant
+       * reason its name claims. One regression would report as two failures, the second pointing
+       * at an unrelated helper.
+       */
+      try {
+        // With the grant: the branch is readable by that person.
+        const before = await f.personas.outsider.db
+          .from("branches")
+          .select("id")
+          .eq("id", f.branchA);
+        expect(
+          before.data?.map((row) => row.id),
+          "the grant should open branch A",
+        ).toEqual([f.branchA]);
+
+        // The owner revokes it, exactly as `revokeGrant` does - through RLS, by row id.
+        const removed = await f.personas.owner.db
+          .from("memberships")
+          .delete({ count: "exact" })
+          .eq("id", granted.data!.id);
+        expect(removed.error?.message ?? null).toBeNull();
+        expect(removed.count, "the owner's delete should affect exactly one row").toBe(1);
+
+        // Same session, no re-login: the branch is gone.
+        const after = await f.personas.outsider.db
+          .from("branches")
+          .select("id")
+          .eq("id", f.branchA);
+        expect(after.data, "access should be gone at the database, not just from the menu").toEqual(
+          [],
+        );
+
+        const memberships = await f.personas.outsider.db.from("memberships").select("id");
+        expect(memberships.data).toEqual([]);
+      } finally {
+        await f.admin.from("memberships").delete().eq("id", granted.data!.id);
+      }
+    });
+
+    it("cannot be done by a manager", async () => {
+      /*
+       * The other half: `membership_owner_all` is what permits the delete, so somebody without it
+       * removes nothing. A zero-row delete is not an error in PostgREST, which is exactly why
+       * `revokeGrant` checks the count rather than trusting the absence of one.
+       *
+       * Branch A, not branch B. B is invisible to managerA, so a delete there would prove only
+       * that you cannot remove what you cannot see. A is their own branch: the row is readable and
+       * the delete still has to match nothing, which is the property `membership_owner_all`
+       * provides and a future `for all` policy over a manager's own branch would quietly remove.
+       */
+      const target = await f.admin
+        .from("memberships")
+        .insert({
+          user_id: f.personas.outsider.userId,
+          org_id: f.orgId,
+          branch_id: f.branchA,
+          role: "staff",
+        })
+        .select("id")
+        .single();
+      expect(target.error?.message ?? null).toBeNull();
+
+      try {
+        const attempt = await f.personas.managerA.db
+          .from("memberships")
+          .delete({ count: "exact" })
+          .eq("id", target.data!.id);
+        /*
+         * The error is asserted separately from the count. A 403 and a missing content-range
+         * header both leave `count` null, so a bare "expected null to be 0" would send the next
+         * reader to the wrong layer entirely.
+         */
+        expect(attempt.error?.message ?? null, "the delete should be refused silently").toBeNull();
+        expect(attempt.count, "a manager should remove nothing").toBe(0);
+
+        const survives = await f.admin
+          .from("memberships")
+          .select("id")
+          .eq("id", target.data!.id)
+          .maybeSingle();
+        expect(survives.data, "the grant should still be there").not.toBeNull();
+      } finally {
+        await f.admin.from("memberships").delete().eq("id", target.data!.id);
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------- creating
+
+  /*
+   * `createBusiness` and `createBranch` claim that `biz_owner_all` and `branch_owner_all` "already
+   * permit exactly these inserts for an owner". The branch half was asserted by the owner's
+   * create-and-delete test above; the business half was asserted by nothing, because every
+   * business in the fixture is made with the service role, which bypasses RLS entirely.
+   *
+   * There was no negative case either, on an action that compiles to a POST endpoint any signed-in
+   * person can reach.
+   */
+  describe("creating a business", () => {
+    it("is allowed for the owner, through RLS", async () => {
+      const created = await f.personas.owner.db
+        .from("businesses")
+        .insert({ org_id: f.orgId, type: "spa", name: `rls owner biz ${f.runId}` })
+        .select("id")
+        .single();
+      expect(created.error?.message ?? null).toBeNull();
+      await f.admin.from("businesses").delete().eq("id", created.data!.id);
+    });
+
+    it("is refused for a manager and for staff", async () => {
+      for (const who of ["managerA", "staffA"] as const) {
+        const attempt = await f.personas[who].db
+          .from("businesses")
+          .insert({ org_id: f.orgId, type: "spa", name: `sneak ${who} ${f.runId}` })
+          .select("id");
+        expect(attempt.error, `${who} should not create a business`).not.toBeNull();
+      }
+    });
+
+    it("is refused in an organisation the owner does not own", async () => {
+      const attempt = await f.personas.owner.db
+        .from("businesses")
+        .insert({ org_id: f.otherOrgId, type: "spa", name: `cross ${f.runId}` })
+        .select("id");
+      expect(attempt.error, "a business may not be added to somebody else's org").not.toBeNull();
+    });
+  });
+
   // ---------------------------------------------------------------- the two admin helpers
 
   /*

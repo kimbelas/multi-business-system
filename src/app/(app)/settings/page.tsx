@@ -3,15 +3,16 @@ import { Swatch } from "@/components/ui/swatch";
 import { requireCapability } from "@/lib/authz";
 import { businessLabel } from "@/lib/business";
 import { loadRoster } from "@/lib/roster";
+import { CreateBranchForm, CreateBusinessForm } from "./create-forms";
 import { InviteForm } from "./invite-form";
 import { MemberActions } from "./member-actions";
 
 /**
  * Businesses, branches and people. Owner only.
  *
- * Card 0019. Inviting somebody, issuing a new password and removing a grant all happen here;
- * creating a business or a branch is still a database change, and the screen says so rather than
- * showing a control that does nothing.
+ * Card 0019, whole: create a business, create a branch, invite somebody, issue them a new
+ * password, remove a grant. Nothing on this screen sends the owner to the database any more, which
+ * was the card's title all along - "the owner runs it without the developer".
  *
  * `manageOrganisation` is the capability, which section 7 gives the owner alone. A staff member or
  * a manager typing this URL gets a 404 — see `lib/authz.ts` for why 404 and not 403.
@@ -34,10 +35,16 @@ export default async function SettingsPage() {
 
   const branchCount = scope.businesses.reduce((n, b) => n + b.branches.length, 0);
 
+  // Businesses in an organisation this person owns, which is what both create forms and the
+  // invite's branch list are allowed to name.
+  const ownedBusinesses = scope.businesses
+    .filter((business) => scope.ownedOrgIds.includes(business.orgId))
+    .map((business) => ({ id: business.id, name: business.name }));
+
   /*
-   * Labelled with the business, because "Main branch" is the name three of them have - the bootstrap
-   * creates exactly that for laundry, spa and skin care. A select of three identical options is a
-   * choice the owner cannot actually make.
+   * Labelled with the business, because "Main branch" is the name three of them have - the
+   * bootstrap creates exactly that for laundry, spa and skin care. A select of three identical
+   * options is a choice the owner cannot actually make.
    */
   const branchOptions = scope.businesses
     /*
@@ -104,6 +111,11 @@ export default async function SettingsPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="mt-4 flex flex-col gap-3">
+        <CreateBusinessForm />
+        <CreateBranchForm businesses={ownedBusinesses} />
       </section>
 
       <section className="mt-8">
@@ -198,21 +210,13 @@ export default async function SettingsPage() {
 
       <section className="mt-8">
         <h2 className="px-1 text-sm font-medium">Add someone</h2>
-        {branchCount === 0 ? (
+        {branchOptions.length === 0 ? (
           <p className="mt-3 rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
-            Create a branch first &mdash; a grant names the branch it applies to.
+            Add a branch first &mdash; a grant names the branch it applies to.
           </p>
         ) : (
           <InviteForm branches={branchOptions} />
         )}
-      </section>
-
-      <section className="mt-4 rounded-xl border border-dashed border-border p-4 sm:p-5">
-        <h2 className="text-sm font-medium">Still in the database</h2>
-        <p className="mt-1.5 text-sm text-muted-foreground">
-          Creating a business or a branch is not on this screen yet. Inviting somebody, giving them
-          a new password and removing their access are.
-        </p>
       </section>
     </main>
   );

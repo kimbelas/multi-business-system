@@ -1,0 +1,160 @@
+"use client";
+
+import { useActionState, useId } from "react";
+
+import { BUSINESS, BUSINESS_TYPES } from "@/lib/business";
+
+import { type ActionResult, createBranch, createBusiness } from "./actions";
+
+/**
+ * Add a business, or a branch inside one.
+ *
+ * Kept beside the list they extend rather than behind a separate screen: on a fresh organisation
+ * this is the first thing that has to happen — the invite form cannot scope a grant without a
+ * branch to scope it to — and on an established one it is used about twice a year. Neither case is
+ * improved by a route of its own.
+ *
+ * Both forms are deliberately plain. A branch is a name and the business it belongs to; a business
+ * is a name and one of three types. There is nothing here to design around, and the interesting
+ * decisions all live in the actions.
+ */
+
+const field =
+  "h-pill w-full rounded-[10px] border border-border bg-card px-3.5 text-[14.5px] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
+const labelClass = "block text-xs font-medium text-muted-foreground";
+const submit =
+  "min-h-pill rounded-[10px] bg-commit px-4 text-[14.5px] font-medium text-commit-foreground transition-opacity disabled:opacity-40";
+
+/*
+ * On its own line, and allowed to break.
+ *
+ * Sharing a `flex items-center` row with the submit button gave this a flex base of min-content -
+ * the longest unbroken token in the message - and a PostgREST error carries tokens like
+ * `branches_business_org_fk`. At 390px that pushes the row past the card, which is the same
+ * sideways scroll the roster row already had once on this screen.
+ */
+function Result({ result }: { result: ActionResult | null }) {
+  if (!result) return null;
+  return (
+    <p
+      role="status"
+      className={`text-[13px] wrap-anywhere ${
+        result.ok ? "text-muted-foreground" : "text-destructive-strong"
+      }`}
+    >
+      {result.message}
+    </p>
+  );
+}
+
+export function CreateBusinessForm() {
+  const [result, action, pending] = useActionState<ActionResult | null, FormData>(
+    createBusiness,
+    null,
+  );
+  // Same reason as the invite form: React resets an uncontrolled form before the action runs, so
+  // without this a refusal empties the field it is complaining about.
+  const prior = result?.submitted;
+  const nameId = useId();
+  const typeId = useId();
+
+  return (
+    <form action={action} className="flex flex-col gap-3 rounded-xl bg-card p-4 shadow-card">
+      <p className="text-sm font-medium">Add a business</p>
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor={nameId} className={labelClass}>
+          Name
+        </label>
+        <input
+          id={nameId}
+          name="name"
+          required
+          placeholder="Laundry"
+          defaultValue={prior?.name ?? ""}
+          className={field}
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor={typeId} className={labelClass}>
+          Type
+        </label>
+        {/*
+         * The three the enum declares, labelled from `lib/business.ts` so this list cannot drift
+         * from the one the rest of the app renders. A fourth type is a migration and a re-derived
+         * palette, not a new option here - `--biz-none` exists because no fourth colour survives
+         * all three dichromacies beside these.
+         */}
+        <select id={typeId} name="type" required defaultValue={prior?.role ?? ""} className={field}>
+          <option value="">Choose a type</option>
+          {BUSINESS_TYPES.map((type) => (
+            <option key={type} value={type}>
+              {BUSINESS[type].label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <button type="submit" disabled={pending} className={`${submit} self-start`}>
+        {pending ? "Adding…" : "Add business"}
+      </button>
+      <Result result={result} />
+    </form>
+  );
+}
+
+export function CreateBranchForm({
+  businesses,
+}: {
+  businesses: readonly { id: string; name: string }[];
+}) {
+  const [result, action, pending] = useActionState<ActionResult | null, FormData>(
+    createBranch,
+    null,
+  );
+  const prior = result?.submitted;
+  const nameId = useId();
+  const businessId = useId();
+
+  if (businesses.length === 0) return null;
+
+  return (
+    <form action={action} className="flex flex-col gap-3 rounded-xl bg-card p-4 shadow-card">
+      <p className="text-sm font-medium">Add a branch</p>
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor={businessId} className={labelClass}>
+          Business
+        </label>
+        <select
+          id={businessId}
+          name="businessId"
+          required
+          defaultValue={prior?.branchId ?? ""}
+          className={field}
+        >
+          <option value="">Choose a business</option>
+          {businesses.map((business) => (
+            <option key={business.id} value={business.id}>
+              {business.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor={nameId} className={labelClass}>
+          Name
+        </label>
+        <input
+          id={nameId}
+          name="name"
+          required
+          placeholder="Main branch"
+          defaultValue={prior?.name ?? ""}
+          className={field}
+        />
+      </div>
+      <button type="submit" disabled={pending} className={`${submit} self-start`}>
+        {pending ? "Adding…" : "Add branch"}
+      </button>
+      <Result result={result} />
+    </form>
+  );
+}

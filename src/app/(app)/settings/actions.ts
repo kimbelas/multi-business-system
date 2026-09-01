@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 
 import { requireCapability } from "@/lib/authz";
+import { BUSINESS_TYPES } from "@/lib/business";
 import { ROLES, type Role } from "@/lib/rbac";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -213,7 +214,13 @@ export async function revokeGrant(
   _prev: ActionResult | null,
   form: FormData,
 ): Promise<ActionResult> {
-  const scope = await requireCapability("manageOrganisation");
+  /*
+   * Called for its refusal, not its return value. This action used to compare `scope.userId`
+   * against the row's owner; it refuses every owner row now - see the note further down for why
+   * counting them was not enough - so nothing here needs to know WHO is asking, only that they are
+   * allowed to ask at all.
+   */
+  await requireCapability("manageOrganisation");
 
   const membershipId = String(form.get("membershipId") ?? "");
   if (!membershipId) return fail("Nothing was selected.");
@@ -367,4 +374,96 @@ export async function reissuePassword(
     message: "New password set. It replaces the old one immediately.",
     tempPassword,
   };
+}
+
+/**
+ * Create a business, or a branch inside one.
+ *
+ * The last thing on this screen that still required SQL, and the reason the invite form is useless
+ * on a fresh organisation: a grant names the branch it applies to, so there has to be a branch.
+ *
+ * Both go in through the owner's session. `biz_owner_all` and `branch_owner_all` already permit
+ * exactly these inserts for an owner, so the service role has no business here - and the branch's
+ * `org_id` is derived by a trigger from its business rather than supplied, so there is nothing for
+ * a caller to get wrong or to forge.
+ */
+export async function createBusiness(
+  _prev: ActionResult | null,
+  form: FormData,
+): Promise<ActionResult> {
+  const scope = await requireCapability("manageOrganisation");
+
+  const name = String(form.get("name") ?? "").trim();
+  const type = String(form.get("type") ?? "");
+
+  // Echoed back for the same reason the invite form needs it: React resets an uncontrolled form
+  // before the action runs, so a refusal would otherwise empty the fields it is complaining about.
+  const submitted = { email: "", name, role: type, branchId: "" };
+
+  if (!name) return fail("Give the business a name.", submitted);
+  if (!(BUSINESS_TYPES as readonly string[]).includes(type))
+    return fail("Choose a type.", submitted);
+
+  /*
+   * The org is SELECTED from what this person owns, not validated after being guessed.
+   *
+   * The first version read `scope.orgId` and checked it was in `ownedOrgIds`. That check validates
+   * the pick; it does not make it. `scope.orgId` is `memberships[0]?.org_id` from a query with no
+   * ORDER BY - its own docstring calls it "one arbitrary org they have any grant in" - so for
+   * somebody owning two organisations the business landed in whichever row Postgres returned
+   * first, with nothing on screen to reveal it. And for somebody who owns A while holding a staff
+   * grant in B, the arbitrary pick could be B, and the action refused with "you do not own an
+   * organisation" on a screen they had legitimately reached.
+   *
+   * `inviteStaff` solved this by deriving the org from the chosen branch. There is no branch here,
+   * so the choice has to be explicit: one owned org needs no question, more than one is a question
+   * the owner has to answer, and either way the answer is checked against `ownedOrgIds`.
+   */
+  const owned = scope.ownedOrgIds;
+  if (owned.length === 0) return fail("You do not own an organisation to add a business to.");
+
+  const requested = String(form.get("orgId") ?? "");
+  const orgId = owned.length === 1 ? owned[0] : requested;
+  if (!orgId || !owned.includes(orgId)) {
+    return fail(
+      owned.length === 1 ? "You do not own that organisation." : "Choose which organisation.",
+    );
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("businesses").insert({ org_id: orgId, name, type });
+  if (error) return fail(`Could not create it: ${error.message}`, submitted);
+
+  revalidatePath("/settings");
+  return { ok: true, message: `${name} added.` };
+}
+
+export async function createBranch(
+  _prev: ActionResult | null,
+  form: FormData,
+): Promise<ActionResult> {
+  const scope = await requireCapability("manageOrganisation");
+
+  const name = String(form.get("name") ?? "").trim();
+  const businessId = String(form.get("businessId") ?? "");
+
+  const submitted = { email: "", name, role: "", branchId: businessId };
+
+  if (!name) return fail("Give the branch a name.", submitted);
+
+  // Checked against what RLS returned, and narrowed to businesses in an owned org - the same
+  // reason the invite form's branch list is filtered rather than showing everything readable.
+  const business = scope.businesses.find(
+    (candidate) => candidate.id === businessId && scope.ownedOrgIds.includes(candidate.orgId),
+  );
+  if (!business) return fail("Choose a business.", submitted);
+
+  const supabase = await createClient();
+  // `org_id` is deliberately absent: `branches_org_id_derived` fills it from the business, and it
+  // overwrites rather than defaults, so the column cannot be forged by a caller who supplies one.
+  const { error } = await supabase.from("branches").insert({ business_id: business.id, name });
+  if (error) return fail(`Could not create it: ${error.message}`, submitted);
+
+  revalidatePath("/settings");
+  return { ok: true, message: `${name} added to ${business.name}.` };
 }
