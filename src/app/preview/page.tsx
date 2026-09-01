@@ -89,7 +89,7 @@ const RECENT = [
 
 function Recent() {
   return (
-    <section className="rounded-xl border border-border bg-card p-4 sm:px-[18px]">
+    <section className="rounded-xl bg-card p-4 shadow-card sm:px-[18px]">
       <header className="mb-1.5 flex items-baseline justify-between">
         <h2 className="text-[12.5px] text-muted-foreground">Today at this branch</h2>
         <Peso amount="1,140.00" className="text-[12.5px] text-muted-foreground" />

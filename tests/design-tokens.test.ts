@@ -156,6 +156,50 @@ describe("theme wiring", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("declares both elevation steps for light and dark", () => {
+    /*
+     * Separate from the light/dark loop above, because that one matches `${token}:\s*oklch` and a
+     * shadow starts with a length rather than a colour. Adding `--elev-1` to that list would have
+     * matched nothing and passed - a guard that cannot fail, which is the defect shape this
+     * codebase keeps producing.
+     *
+     * Both modes are required for a reason that is not tidiness. A shadow is the absence of
+     * light, and there is almost none to remove from a near-black ground: the light values land
+     * at roughly 1.1:1 against it and do not render at all. Reusing them would leave dark with no
+     * card separation whatsoever, and the card is the only thing separating a figure from the
+     * page now that the border is gone.
+     */
+    for (const token of ["--elev-1", "--elev-2"]) {
+      const declarations = CSS.match(new RegExp(`${token}:`, "g")) ?? [];
+      expect(declarations.length, `${token} should be declared for light and dark`).toBe(2);
+    }
+  });
+
+  it("keeps elevation in the tokens, not in the components", () => {
+    /*
+     * The same rule the colours have, for the same reason: a raw shadow written into a component
+     * is a design decision nobody can find later, and this design now leans on elevation to do
+     * what a 1px border used to do. Tailwind's arbitrary `shadow-[...]` is the same mistake in a
+     * different spelling, so both are refused.
+     */
+    const dir = path.join(process.cwd(), "src");
+    const files: string[] = [];
+    const walk = (d: string) => {
+      for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+        const full = path.join(d, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else if (/\.(tsx?|css)$/.test(entry.name) && entry.name !== "globals.css") files.push(full);
+      }
+    };
+    walk(dir);
+
+    const offenders = files.filter((f) => {
+      const text = fs.readFileSync(f, "utf8");
+      return /box-shadow:/.test(text) || /shadow-\[/.test(text);
+    });
+    expect(offenders, "use var(--elev-1) / var(--elev-2) instead").toEqual([]);
+  });
+
   it("names faces that the layout actually publishes", () => {
     // The other half of the same bug: the stylesheet can name a variable nothing defines and
     // fail exactly as quietly. So this checks the pair rather than either side.

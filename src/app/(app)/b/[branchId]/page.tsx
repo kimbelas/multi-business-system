@@ -66,7 +66,7 @@ export default async function BranchHome({ params }: { params: Promise<{ branchI
         </div>
       </header>
 
-      <section className="mt-8 rounded-xl border border-border p-4 sm:p-5">
+      <section className="mt-8 rounded-xl bg-card p-4 shadow-card sm:p-5">
         <h2 className="text-sm font-medium">What your role allows here</h2>
         <ul className="mt-2.5 flex flex-wrap gap-1.5">
           {allowed.map((item) => (
@@ -93,7 +93,7 @@ export default async function BranchHome({ params }: { params: Promise<{ branchI
 
       <Link
         href="/"
-        className="mt-6 inline-flex min-h-pill items-center gap-1.5 rounded-xl border border-border px-4 py-2.5 text-sm hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        className="mt-6 inline-flex min-h-pill items-center gap-1.5 rounded-xl bg-card px-4 py-2.5 text-sm shadow-card transition-shadow hover:shadow-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
         <ChevronLeft aria-hidden className="size-4 text-muted-foreground" />
         All branches

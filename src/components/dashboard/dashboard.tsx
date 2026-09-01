@@ -38,7 +38,7 @@ const TILE_TONE = {
 
 function StatTile({ tile }: { tile: Tile }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-3.5 sm:p-4">
+    <div className="rounded-xl bg-card p-3.5 shadow-card sm:p-4">
       <div className="text-xs text-muted-foreground">{tile.label}</div>
       <div className="mt-1 font-mono text-2xl font-semibold tabular-nums">{tile.value}</div>
       <div className={cn("mt-0.5 text-[11.5px]", TILE_TONE[tile.tone ?? "muted"])}>{tile.note}</div>
@@ -51,7 +51,7 @@ const COLUMNS = ["Business", "Revenue", "Tx", "Variance", "Close"] as const;
 
 function BusinessTable({ rows }: { rows: readonly BusinessRow[] }) {
   return (
-    <section className="rounded-xl border border-border bg-card p-4 sm:px-[18px]">
+    <section className="rounded-xl bg-card p-4 shadow-card sm:px-[18px]">
       <h2 className="mb-3 text-[12.5px] text-muted-foreground">By business</h2>
       <table className="w-full border-collapse">
         <thead>

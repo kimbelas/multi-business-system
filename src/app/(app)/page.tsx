@@ -75,8 +75,15 @@ export default async function HomePage() {
 
       <div className="mt-8 flex flex-col gap-4">
         {scope.businesses.map((business) => (
-          <section key={business.id} className="rounded-xl border border-border p-4 sm:p-5">
-            <div className="flex items-center justify-between gap-3">
+          /*
+           * The business is a heading on the ground, not a card. Nesting a raised row inside a
+           * raised card gives a surface two elevations at once, which in a design that separates
+           * by shadow rather than by line reads as a rendering mistake — and it is what the
+           * chosen layout does anyway: the branch rows are the cards, and the business name is a
+           * label above them.
+           */
+          <section key={business.id}>
+            <div className="flex items-center justify-between gap-3 px-1">
               <h2 className="flex min-w-0 items-center gap-2.5 text-[17px] font-medium">
                 <Swatch type={business.type} />
                 <span className="truncate">{business.name}</span>
@@ -97,7 +104,7 @@ export default async function HomePage() {
                       <Link
                         href={`/b/${branch.id}`}
                         aria-label={`${branch.name} — you are ${roleLabel(branch.role)} here`}
-                        className="flex min-h-pill items-center justify-between gap-3 rounded-[10px] border border-border bg-card px-3.5 py-2 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        className="flex min-h-pill items-center justify-between gap-3 rounded-[10px] bg-card px-3.5 py-2 shadow-card transition-shadow hover:shadow-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                       >
                         <span className="min-w-0 truncate text-[14.5px]">{branch.name}</span>
                         <span className="flex flex-none items-center gap-1.5">
@@ -119,7 +126,7 @@ export default async function HomePage() {
       {branchCount > 1 && (
         <Link
           href="/switch"
-          className="mt-4 flex min-h-pill items-center justify-between gap-3 rounded-xl border border-border px-4 py-2.5 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          className="mt-4 flex min-h-pill items-center justify-between gap-3 rounded-xl bg-card px-4 py-2.5 shadow-card transition-shadow hover:shadow-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
           <span>
             <span className="block text-sm font-medium">Switch branch</span>

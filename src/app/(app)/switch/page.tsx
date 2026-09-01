@@ -50,7 +50,7 @@ export default async function SwitchPage() {
                         type="submit"
                         disabled={current}
                         aria-current={current ? "true" : undefined}
-                        className="flex h-pill w-full items-center justify-between rounded-[10px] border border-border bg-card px-4 text-left text-[14.5px] hover:bg-muted disabled:cursor-default disabled:opacity-60"
+                        className="flex h-pill w-full items-center justify-between rounded-[10px] bg-card px-4 text-left text-[14.5px] shadow-card transition-shadow hover:shadow-none disabled:cursor-default disabled:opacity-60"
                       >
                         <span>
                           {branch.name}

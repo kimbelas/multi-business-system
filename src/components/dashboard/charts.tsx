@@ -46,7 +46,7 @@ export function WeekChart({
   const types = days[0]?.slices.map((slice) => slice.type) ?? [];
 
   return (
-    <section className={cn("rounded-xl border border-border bg-card p-4", className)}>
+    <section className={cn("rounded-xl bg-card p-4 shadow-card", className)}>
       <header className="mb-2.5 flex items-baseline justify-between gap-3">
         <h2 className="text-[12.5px] text-muted-foreground">This week, by business</h2>
         <Legend types={types} />
@@ -107,7 +107,7 @@ export function ShareBar({ rows, className }: { rows: readonly ShareRow[]; class
   const percents = sharePercents(rows.map((row) => row.value));
 
   return (
-    <section className={cn("rounded-xl border border-border bg-card p-4", className)}>
+    <section className={cn("rounded-xl bg-card p-4 shadow-card", className)}>
       <h2 className="mb-2.5 text-[12.5px] text-muted-foreground">Today&rsquo;s split</h2>
 
       <div className="flex h-3.5 gap-0.5">

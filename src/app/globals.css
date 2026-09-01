@@ -173,8 +173,20 @@
   /* ---------------------------------------------------------------- ground */
 
   /* The page is a ground and the card is raised. shadcn ships both pure white, which leaves a
-   * 1px border doing all the work of separating them. */
-  --background: oklch(0.985 0 0); /* #fafafa */
+   * 1px border doing all the work of separating them.
+   *
+   * Cooler and one step darker than the #fafafa it started at, because the card is now separated
+   * by ELEVATION rather than by a line (see --elev-1). A shadow needs a ground with enough tone
+   * to fall on; on #fafafa a soft shadow is invisible and the card floats on nothing. */
+  --background: oklch(0.9707 0.0027 247.9); /* #f4f5f7 */
+
+  /* Muted text, overriding shadcn's oklch(0.556 0 0) - about 3.1:1 on white, which is below the
+   * 4.5:1 small-text floor and was carrying real labels. This measures 4.86:1. The old value was
+   * inherited from the generated block rather than chosen, which is how it went unexamined. */
+  --muted-foreground: oklch(0.5231 0.0243 258.3); /* #697280 */
+
+  /* Ink, cooled very slightly to sit with the new ground. 15.02:1 on the card. */
+  --foreground: oklch(0.2542 0.0129 264.4); /* #22272e */
 
   /* ---------------------------------------------------------------- accent */
 
@@ -187,12 +199,14 @@
    * between the blue and the green and nearly doubles that, to 0.086. Chroma is 0.095 rather
    * than 0.105 because 0.105 at this lightness falls outside sRGB, so the token would have
    * named a colour no screen can render. */
-  --commit: oklch(0.58 0.095 202); /* #148b92 */
-  --commit-foreground: oklch(1 0 0); /* 4.05:1 on the fill; the label is large text */
+  --commit: oklch(0.546 0.065 186); /* #3f7d76 */
+  --commit-foreground: oklch(
+    1 0 0
+  ); /* 4.77:1 on the fill - small text passes now, not only large */
 
   /* The accent hue at 28% lightness: dark enough to read as ink, related enough that the
    * keypad and Record sale look like one control group. Its only other appearance. */
-  --commit-deep: oklch(0.277 0.046 202); /* #10322f */
+  --commit-deep: oklch(0.277 0.04 186); /* the accent hue at 28% lightness */
 
   /* ---------------------------------------------------------------- status */
 
@@ -234,6 +248,23 @@
   --chart-4: var(--biz-none);
   --chart-5: var(--biz-none);
 
+  /* ---------------------------------------------------------------- elevation */
+
+  /* A card is raised, not outlined. This is the whole of the visual change: the previous theme
+   * separated a card from the page with a 1px border, and this one lifts it instead.
+   *
+   * Two layers rather than one, because a single shadow reads as either a hard edge or a smudge:
+   * the tight layer does the job the border used to do, and the wide one is the light falling
+   * away. Both are near-black at very low alpha rather than grey, so they darken whatever they
+   * land on instead of tinting it.
+   *
+   * NOT a neumorphic pair. The two-sided version - dark bottom-right, white top-left - needs the
+   * card and the page to be the SAME colour, and that costs about 1.5:1 of contrast on every
+   * label sitting on it. Measured across ten variants of that idea, seven failed the small-text
+   * floor. This keeps the white card. */
+  --elev-1: 0 2px 6px oklch(0.2542 0.0129 264.4 / 0.08);
+  --elev-2: 0 8px 20px oklch(0.2542 0.0129 264.4 / 0.06);
+
   /* ---------------------------------------------------------------- controls */
 
   /* Floors, not defaults: nothing shrinks on a bigger screen. The keypad cap is the whole
@@ -247,9 +278,24 @@
 .dark {
   --background: oklch(0.145 0 0);
 
-  --commit: oklch(0.75 0.09 202); /* #60bfc6 */
+  --commit: oklch(0.75 0.09 186); /* the light accent's hue, lightened for a dark ground */
   --commit-foreground: oklch(0.145 0 0);
-  --commit-deep: oklch(0.386 0.063 202);
+  --commit-deep: oklch(0.386 0.063 186);
+
+  /* Restated here for the reason the block header gives: `.dark` and the appended `:root` have
+   * equal specificity, so source order decides and the light values would otherwise win. */
+  --muted-foreground: oklch(0.708 0 0);
+  --foreground: oklch(0.985 0 0);
+
+  /* Elevation on a dark ground is a different problem, not the same shadow darker.
+   *
+   * A shadow is the absence of light, and there is almost none to remove from #252525 - the
+   * light values land at roughly 1.1:1 against it and simply do not appear. So dark keeps the
+   * two-layer shape for consistency and pushes to pure black at a much higher alpha, which is
+   * enough to read as depth without the card growing a visible halo. Where a card still needs a
+   * hard edge in dark, `--border` is the answer, not a stronger shadow. */
+  --elev-1: 0 2px 6px oklch(0 0 0 / 0.44);
+  --elev-2: 0 8px 20px oklch(0 0 0 / 0.34);
 
   --good: oklch(0.723 0.19 149.579);
   --warn: oklch(0.795 0.184 86.047);
@@ -294,6 +340,11 @@
   --color-biz-spa: var(--biz-spa);
   --color-biz-skincare: var(--biz-skincare);
   --color-biz-none: var(--biz-none);
+
+  /* One card elevation, both steps together, so a component says `shadow-card` and never picks
+   * a layer. The two are separate tokens because dark needs different alphas, and one utility
+   * because a card using only the tight layer would be a different card. */
+  --shadow-card: var(--elev-1), var(--elev-2);
 
   /* So the floors are reachable as utilities - h-key, min-h-pill, h-commit, max-w-pad - and a
    * violation shows up in the markup instead of being a number somebody was supposed to

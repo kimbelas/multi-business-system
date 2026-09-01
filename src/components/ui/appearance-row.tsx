@@ -18,7 +18,7 @@ export function AppearanceRow({ className }: { className?: string }) {
   return (
     <div
       className={[
-        "flex items-center justify-between gap-4 rounded-xl border border-border p-4 sm:hidden",
+        "flex items-center justify-between gap-4 rounded-xl bg-card p-4 shadow-card sm:hidden",
         className ?? "",
       ]
         .join(" ")
