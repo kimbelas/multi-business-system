@@ -7,8 +7,10 @@ on:
   push:
     branches: [main]
   pull_request:
-  # The rls and deployed jobs write to a real project and assert against a real deployment, so
-  # they are opt-in: run them from the Actions tab, or let the weekly schedule catch drift.
+  # The `deployed` job asserts against a real deployment, so it is opt-in: run it from the Actions
+  # tab, or let the weekly schedule catch drift. The policy suite used to be opt-in on the same
+  # argument and now lives in rls.yml, which runs on every push - see that file for why it needed a
+  # workflow of its own rather than a trigger here.
   workflow_dispatch:
   schedule:
     - cron: "0 17 * * 1" # Monday 01:00 Asia/Manila
@@ -118,133 +120,6 @@ jobs:
               print "::warning::Over 75%% of the Worker budget is used"
             }
           }'
-
-  rls:
-    # The five-persona policy suite, against a real Supabase project.
-    #
-    # ## When it runs, and why that changed
-    #
-    # It was dispatch-and-schedule only, on the argument that it creates real auth users and a
-    # real organization, and that a suite writing to the project on every commit is one somebody
-    # eventually points at production by accident. The argument was sound and the consequence was
-    # not: nothing ever dispatched it and no schedule had come round, so from the day it was
-    # written to the day somebody looked, it had never executed once. Every CI summary in between
-    # said `rls: skipped`, next to a green tick.
-    #
-    # So it now runs on pull requests too, which is what card 0003 asks for in as many words -
-    # "the suite runs on every PR". The original worry is answered by the fixture rather than by
-    # the trigger: every run builds its own organization under a random run id and tears down by
-    # recorded id, never by name pattern and never with an unfiltered delete, so two runs cannot
-    # collide and no run can touch a row it did not create.
-    #
-    # It also used to skip itself rather than fail when the secrets were absent, to let a fork run
-    # CI. Wrong twice over: it never ran on a push or a PR, so a fork did not reach it, and "skip"
-    # on a job that exists to assert authorization reads as "pass" in every summary anyone looks
-    # at. It skipped its way to green on the only run it ever had. It now fails when it cannot run.
-    if: >-
-      github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-      || github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      # The official action rather than a curl of a release asset: the asset naming is theirs to
-      # change and a 404 in a pipeline reads as a schema problem rather than a download problem.
-      - uses: supabase/setup-cli@v1
-        with:
-          version: latest
-
-      - name: Say which project this is about to write to, and refuse to run on half a set
-        # The host only, never the key. Pointing this at the wrong project is the one mistake
-        # that matters here, and a log line naming it is the cheapest guard against it.
-        #
-        # All three are checked, not just the URL. This step used to read the URL alone, and on
-        # the first run it ever had it printed a target, printed no warning, and let vitest skip
-        # all 36 tests to a green job - because SUPABASE_SERVICE_ROLE_KEY was never configured.
-        # A job whose whole purpose is asserting authorization must not be able to pass without
-        # asserting any.
-        #
-        # Failing rather than warning is the point, and it does not cost a fork anything: this
-        # job only runs on workflow_dispatch and schedule, so nobody reaches it by pushing. A
-        # fork that deliberately dispatches it is better told why it cannot run than shown a
-        # green tick it should not trust.
-        run: |
-          missing=""
-          [ -n "${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}" ] || missing="$missing NEXT_PUBLIC_SUPABASE_URL"
-          [ -n "${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" ] || missing="$missing NEXT_PUBLIC_SUPABASE_ANON_KEY"
-          [ -n "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" ] || missing="$missing SUPABASE_SERVICE_ROLE_KEY"
-
-          if [ -n "$missing" ]; then
-            echo "::error::The RLS suite cannot run. Missing secrets:$missing"
-            exit 1
-          fi
-
-          url="${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}"
-          echo "Target: $(echo "$url" | sed -E 's#^https?://([^/]+).*#\1#')"
-
-      - name: Refuse to test a schema that is behind the migrations
-        # The failure this exists to prevent, which happened three times in one evening:
-        #
-        # the suite asserts policies against whatever schema the project happens to have, and
-        # nothing connected that schema to the migrations in the repository. A migration written,
-        # committed and never applied produced a red suite that looked like a policy bug; the same
-        # migration applied but not recorded produced a green suite that proved nothing about the
-        # committed code. Both cost a full round trip to diagnose, and neither was visible here.
-        #
-        # So: compare the local migration files against the remote history table and fail with the
-        # versions that are missing. This deliberately does NOT push - CI asserting a schema is a
-        # different thing from CI changing one, and only one of them needs DDL authority on a live
-        # database. A drift is a person's decision to resolve, and now it is a decision they are
-        # told about instead of one they debug through the test output.
-        #
-        # Skipped rather than failed when SUPABASE_DB_URL is absent: unlike the three API
-        # credentials, this one is not required for the suite to be meaningful, only for this
-        # check to be possible. Saying so is the point - a silent skip here is what the whole
-        # evening was about.
-        #
-        # The URL arrives through `env` rather than inline `${{ }}`: a secret interpolated into a
-        # shell script is one quoting mistake away from being echoed, and a connection string is
-        # the one credential here that carries DDL rights. `secrets` is also not a context that
-        # step-level `if` can read, so the emptiness check belongs in the script anyway.
-        env:
-          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: |
-          if [ -z "$DB_URL" ]; then
-            echo "::warning::SUPABASE_DB_URL is not set - skipping the drift check. The suite will"
-            echo "::warning::run against whatever schema the project has, unverified."
-            exit 0
-          fi
-
-          out=$(supabase migration list --db-url "$DB_URL" 2>&1) || {
-            echo "::error::could not read the remote migration history"; echo "$out"; exit 1; }
-          echo "$out"
-
-          # Rows are "  <local> | <remote> | <time>". A local version with an empty remote column
-          # is a migration this project has committed and the database has never been told about.
-          missing=$(echo "$out" | awk -F'|' '/^[[:space:]]*[0-9]{14}[[:space:]]*\|/ {
-            gsub(/ /,"",$1); gsub(/ /,"",$2); if ($2 == "") print $1 }')
-
-          if [ -n "$missing" ]; then
-            echo "::error::The database is behind the repository. Unapplied migrations:"
-            echo "$missing" | sed 's/^/  /'
-            echo "Run: supabase db push   (or migration repair, if they were applied by hand)"
-            exit 1
-          fi
-          echo "Schema and migrations agree."
-
-      - name: Policy suite
-        run: pnpm test:rls
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
   deployed:
     # The deployed build as the testing ground: the guards that only mean anything once the app
