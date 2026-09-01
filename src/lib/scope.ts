@@ -186,7 +186,21 @@ export async function loadScope(): Promise<Scope | null> {
   const { data: businessRows } = await supabase
     .from("businesses")
     .select("id, org_id, name, type, branches (id, name, is_active)")
-    .order("name");
+    /*
+     * Ordered by name AND then by id, because name alone is not a total order.
+     *
+     * Card 0035 replaced an arbitrary `memberships[0]` with `activeOrgIdFor`, and the unit tests pin
+     * that function as order-independent. A review then pointed out that its INPUT was not fully
+     * determined: the active business falls back to the first branch of the first business, and two
+     * organisations can each hold a business with the same name. `.order("name")` leaves that tie to
+     * the plan, so the tie would decide `activeOrgId` - the same coin flip one level down, and one
+     * the reload test could not catch because both loads would agree.
+     *
+     * `id` is unique, so this is a total order and the fallback is now deterministic for real rather
+     * than deterministic given a tie-break nobody specified.
+     */
+    .order("name")
+    .order("id");
 
   // One rule, one implementation. This was a separate closure that happened to agree with
   // `activeRoleFor`; two copies of a permission rule is one copy too many.
