@@ -61,7 +61,18 @@ function Result({ result }: { result: ActionResult | null }) {
   );
 }
 
-export function CreateBusinessForm() {
+export function CreateBusinessForm({
+  organisations,
+}: {
+  /*
+   * Every organisation this person owns. One means no question is asked and the action derives it;
+   * several means the select below is the only way the action can be satisfied at all.
+   *
+   * Passed in rather than read here, because this is a client component and the names come from the
+   * same query that names the header.
+   */
+  organisations: readonly { id: string; name: string }[];
+}) {
   const [result, action, pending] = useActionState<ActionResult | null, FormData>(
     createBusiness,
     null,
@@ -71,6 +82,7 @@ export function CreateBusinessForm() {
   const prior = result?.submitted;
   const nameId = useId();
   const titleId = useId();
+  const orgSelectId = useId();
   const typeId = useId();
 
   return (
@@ -82,6 +94,32 @@ export function CreateBusinessForm() {
       <h3 id={titleId} className="text-sm font-medium">
         Add a business
       </h3>
+
+      {/*
+       * Asked only when there is a choice. A select with one option is a question with one answer,
+       * and `chooseOwnedOrg` ignores a value sent when none was asked for - a form that asked nothing
+       * cannot have been answered.
+       *
+       * When it IS asked, no default is selected: an owner picking the wrong organisation because it
+       * happened to be first is the failure this whole card is about, one step along.
+       */}
+      {organisations.length > 1 && (
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={orgSelectId} className={labelClass}>
+            Organisation
+          </label>
+          <select id={orgSelectId} name="orgId" required defaultValue="" className={field}>
+            <option value="" disabled>
+              Choose one
+            </option>
+            {organisations.map((organisation) => (
+              <option key={organisation.id} value={organisation.id}>
+                {organisation.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="flex flex-col gap-1.5">
         <label htmlFor={nameId} className={labelClass}>
           Name

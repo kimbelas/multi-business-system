@@ -9,6 +9,7 @@ import {
   type Role,
   SPEC_LABEL,
   activeOrgIdFor,
+  chooseOwnedOrg,
   can,
   grant,
   navFor,
@@ -199,5 +200,70 @@ describe("activeOrgIdFor", () => {
      * This is a display and lookup value. Everything that WRITES goes through `ownedOrgIds`.
      */
     expect(activeOrgIdFor([A], B)).toBe(B);
+  });
+});
+
+describe("chooseOwnedOrg", () => {
+  const A = "aaaaaaaa-0000-0000-0000-000000000000";
+  const B = "bbbbbbbb-0000-0000-0000-000000000000";
+  const C = "cccccccc-0000-0000-0000-000000000000";
+
+  /*
+   * Card 0042. `createBusiness` read an `orgId` field whenever the caller owned two or more
+   * organisations, and no form rendered one - so that person met "Choose which organisation." with
+   * nothing to choose with, every time. The branch had never executed successfully: the only way to
+   * reach it was to fail at it, which is precisely what a unit test on the rule would have shown.
+   */
+
+  it("needs no answer when there is only one organisation", () => {
+    expect(chooseOwnedOrg([A], "")).toEqual({ ok: true, orgId: A });
+    expect(chooseOwnedOrg([A], null)).toEqual({ ok: true, orgId: A });
+  });
+
+  it("ignores an answer to a question it did not ask", () => {
+    /*
+     * A single-org owner is shown no select, so anything arriving in that field did not come from
+     * the form. Ignored rather than validated: a form that asked nothing cannot have been answered,
+     * and treating the value as meaningful would let a crafted request pick the refusal path.
+     */
+    expect(chooseOwnedOrg([A], B)).toEqual({ ok: true, orgId: A });
+  });
+
+  it("asks when there is genuinely a choice", () => {
+    expect(chooseOwnedOrg([A, B], "")).toEqual({ ok: false, reason: "ambiguous" });
+    expect(chooseOwnedOrg([A, B], null)).toEqual({ ok: false, reason: "ambiguous" });
+    expect(chooseOwnedOrg([A, B], "   ")).toEqual({ ok: false, reason: "ambiguous" });
+  });
+
+  it("accepts an organisation they own", () => {
+    expect(chooseOwnedOrg([A, B], B)).toEqual({ ok: true, orgId: B });
+    expect(chooseOwnedOrg([A, B, C], A)).toEqual({ ok: true, orgId: A });
+  });
+
+  it("refuses one they do not own, and says which refusal it is", () => {
+    // A separate reason from "ambiguous", because the two are different mistakes and the screen
+    // says different things about them.
+    expect(chooseOwnedOrg([A, B], C)).toEqual({ ok: false, reason: "not-owned" });
+  });
+
+  it("refuses when they own nothing", () => {
+    expect(chooseOwnedOrg([], A)).toEqual({ ok: false, reason: "none" });
+    expect(chooseOwnedOrg([], "")).toEqual({ ok: false, reason: "none" });
+  });
+
+  it("counts organisations rather than rows", () => {
+    /*
+     * Two owner grants in one organisation would make "exactly one" false and turn a settled case
+     * into a question with one answer. `memberships_one_org_wide_grant_per_person` forbids that, so
+     * this is defence rather than a live case - and it is the difference between asking and not.
+     */
+    expect(chooseOwnedOrg([A, A], "")).toEqual({ ok: true, orgId: A });
+    expect(chooseOwnedOrg([A, A, B], "")).toEqual({ ok: false, reason: "ambiguous" });
+  });
+
+  it("does not care what order they arrive in", () => {
+    // The same property `activeOrgIdFor` holds, for the same reason: the input is an unordered query.
+    expect(chooseOwnedOrg([A, B], B)).toEqual(chooseOwnedOrg([B, A], B));
+    expect(chooseOwnedOrg([A, B], "")).toEqual(chooseOwnedOrg([B, A], ""));
   });
 });

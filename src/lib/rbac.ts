@@ -179,6 +179,52 @@ export function activeOrgIdFor(
 }
 
 /**
+ * Which organisation a write may name, when the writer owns more than one.
+ *
+ * Card 0042. `createBusiness` read an `orgId` field from the form whenever the caller owned two or
+ * more organisations - and no form ever rendered one, so for that person every submit answered
+ * "Choose which organisation." with nothing on screen to choose with. The form was a dead end that
+ * only existed for people the app had never had.
+ *
+ * Pure and here, beside `activeOrgIdFor`, for the reason that keeps recurring: `lib/scope.ts` carries
+ * `import "server-only"` and the actions import a Supabase client, so a rule left in either is a rule
+ * no test can reach. The failing branch in `createBusiness` had never executed successfully - it was
+ * only reachable in the case where it refused - which is exactly the shape a unit test would have
+ * caught on the day it was written.
+ *
+ * The distinction it encodes: **one owned organisation is not a question, so no answer is trusted.**
+ * A single-org owner sends no field and a value sent anyway is ignored rather than validated, because
+ * a form that asked nothing cannot have been answered. More than one IS a question, and the answer is
+ * checked against what they own rather than believed.
+ */
+export type OwnedOrgChoice =
+  | { readonly ok: true; readonly orgId: string }
+  /** They own none, so there is nothing to add a business to. */
+  | { readonly ok: false; readonly reason: "none" }
+  /** They own several and named none - the case that used to be unanswerable. */
+  | { readonly ok: false; readonly reason: "ambiguous" }
+  /** They named one they do not own. */
+  | { readonly ok: false; readonly reason: "not-owned" };
+
+export function chooseOwnedOrg(
+  ownedOrgIds: readonly string[],
+  requested: string | null,
+): OwnedOrgChoice {
+  // Deduplicated so "exactly one" means one organisation rather than one row. A second owner grant
+  // in the same org is refused by `memberships_one_org_wide_grant_per_person`, so this is defence
+  // rather than a live case - and it is the difference between asking a question and not.
+  const owned = [...new Set(ownedOrgIds)];
+
+  if (owned.length === 0) return { ok: false, reason: "none" };
+  if (owned.length === 1) return { ok: true, orgId: owned[0] };
+
+  const named = requested?.trim() ?? "";
+  if (named === "") return { ok: false, reason: "ambiguous" };
+  if (!owned.includes(named)) return { ok: false, reason: "not-owned" };
+  return { ok: true, orgId: named };
+}
+
+/**
  * The role that applies where the person is currently looking.
  *
  * The two fallbacks differ on purpose, and that is the whole substance of this function:

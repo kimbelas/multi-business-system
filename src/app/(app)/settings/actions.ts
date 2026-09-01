@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 
 import { requireCapability } from "@/lib/authz";
+import { chooseOwnedOrg } from "@/lib/rbac";
 import { BUSINESS_TYPES } from "@/lib/business";
 import { ROLES, type Role } from "@/lib/rbac";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -552,16 +553,24 @@ export async function createBusiness(
    * so the choice has to be explicit: one owned org needs no question, more than one is a question
    * the owner has to answer, and either way the answer is checked against `ownedOrgIds`.
    */
-  const owned = scope.ownedOrgIds;
-  if (owned.length === 0) return fail("You do not own an organisation to add a business to.");
-
-  const requested = String(form.get("orgId") ?? "");
-  const orgId = owned.length === 1 ? owned[0] : requested;
-  if (!orgId || !owned.includes(orgId)) {
+  /*
+   * The choosing rule lives in `chooseOwnedOrg`, in a module a test can reach. The branch that reads
+   * `orgId` had never executed successfully - the form rendered no such field, so an owner of two
+   * organisations met "Choose which organisation." with nothing to choose with, and the only way to
+   * reach that line was to fail at it (card 0042).
+   */
+  const choice = chooseOwnedOrg(scope.ownedOrgIds, String(form.get("orgId") ?? ""));
+  if (!choice.ok) {
     return fail(
-      owned.length === 1 ? "You do not own that organisation." : "Choose which organisation.",
+      {
+        none: "You do not own an organisation to add a business to.",
+        ambiguous: "Choose which organisation this business belongs to.",
+        "not-owned": "You do not own that organisation.",
+      }[choice.reason],
+      submitted,
     );
   }
+  const orgId = choice.orgId;
 
   const supabase = await createClient();
   const { error } = await supabase.from("businesses").insert({ org_id: orgId, name, type });

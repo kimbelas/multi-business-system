@@ -68,6 +68,18 @@ export interface Scope {
    * offering one of those is offering a choice the database will refuse.
    */
   readonly ownedOrgIds: readonly string[];
+  /**
+   * The same organisations, with their names, for the one form that has to ask which.
+   *
+   * Ids alone were enough while every screen either derived the organisation from a row or had only
+   * one to choose from. `createBusiness` has neither: there is no branch to derive from, so an owner
+   * of two organisations has to be asked - and a select of uuids is not a question anybody can
+   * answer.
+   *
+   * Costs no extra round trip: the query that used to fetch the active organisation's name now
+   * fetches these in the same call.
+   */
+  readonly ownedOrgs: readonly { readonly id: string; readonly name: string }[];
   readonly isOwner: boolean;
   /**
    * Whether this person holds any grant at all.
@@ -164,6 +176,11 @@ export async function loadScope(): Promise<Scope | null> {
   const memberships = (membershipRows ?? []) as MembershipRow[];
   const isOwner = memberships.some((m) => m.role === "owner" && m.branch_id === null);
 
+  // Hoisted, because the organisation-name query below needs it and so does the returned scope.
+  const ownedOrgIds = memberships
+    .filter((m) => m.role === "owner" && m.branch_id === null)
+    .map((m) => m.org_id);
+
   // One joined query rather than three round trips. This is also the query that used to recurse
   // (42P17), so it is covered by the persona suite.
   const { data: businessRows } = await supabase
@@ -209,19 +226,42 @@ export async function loadScope(): Promise<Scope | null> {
     memberships.map((m) => m.org_id),
     chosen?.business.orgId ?? null,
   );
-  const { data: org } = activeOrgId
-    ? await supabase.from("organizations").select("name").eq("id", activeOrgId).maybeSingle()
-    : { data: null };
+  /*
+   * One query for every organisation name this render needs: the active one, to put in the header,
+   * and the owned ones, for the create-business form's select.
+   *
+   * `in` rather than `eq`, which is the same round trip. The active organisation is included
+   * explicitly because it is not necessarily owned - a manager's active org is one they merely hold a
+   * grant in - so taking names only from `ownedOrgIds` would blank the header for everybody who is
+   * not an owner.
+   */
+  const nameFor = new Map<string, string>();
+  const wantedNames = [...new Set([...ownedOrgIds, ...(activeOrgId ? [activeOrgId] : [])])];
+  if (wantedNames.length > 0) {
+    const { data: orgRows } = await supabase
+      .from("organizations")
+      .select("id, name")
+      .in("id", wantedNames);
+    for (const row of (orgRows ?? []) as { id: string; name: string }[]) {
+      nameFor.set(row.id, row.name);
+    }
+  }
 
   return {
     userId: user.id,
     email: user.email ?? "",
     displayName: (user.user_metadata?.full_name as string | undefined) ?? user.email ?? "",
     activeOrgId,
-    activeOrgName: org?.name ?? null,
-    ownedOrgIds: memberships
-      .filter((m) => m.role === "owner" && m.branch_id === null)
-      .map((m) => m.org_id),
+    activeOrgName: (activeOrgId && nameFor.get(activeOrgId)) || null,
+    ownedOrgIds,
+    /*
+     * Named, and only the ones a name came back for. A missing name means RLS did not return that
+     * organisation, which should not happen for an org you own - and offering an option labelled
+     * "undefined" would be worse than offering one fewer.
+     */
+    ownedOrgs: ownedOrgIds
+      .filter((id) => nameFor.has(id))
+      .map((id) => ({ id, name: nameFor.get(id)! })),
     isOwner,
     hasAnyGrant: memberships.length > 0,
     role: isOwner ? "owner" : highest(memberships.map((m) => m.role)),

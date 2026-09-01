@@ -175,7 +175,7 @@ export default async function SettingsPage() {
       </section>
 
       <section className="mt-4 flex flex-col gap-3">
-        <CreateBusinessForm />
+        <CreateBusinessForm organisations={scope.ownedOrgs} />
         <CreateBranchForm businesses={ownedBusinesses} />
       </section>
 
