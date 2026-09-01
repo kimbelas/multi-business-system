@@ -50,3 +50,8 @@ next-env.d.ts
 # Playwright
 test-results/
 playwright-report/
+
+# Browser sessions and the fixture manifest the e2e suite writes. Real cookies for real accounts,
+# and the manifest carries their generated passwords - per-run, deleted by the teardown, and never
+# committed.
+tests-e2e/.auth

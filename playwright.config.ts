@@ -44,6 +44,46 @@ export default defineConfig({
     baseURL: DEPLOYED ?? "http://127.0.0.1:3000",
     trace: "on-first-retry",
   },
+
+  /*
+   * Three projects, because two kinds of spec want different things and one of them is expensive.
+   *
+   * `public` is everything that was here before: it drives /login and /preview and needs no
+   * session, so it must not wait on the setup project or it would pay for accounts it never uses.
+   *
+   * `authed` needs a signed-in browser. Its setup creates real auth users in a real project and its
+   * teardown deletes them by recorded id, which is why it is a project dependency rather than a
+   * `globalSetup`: a teardown attached to a project runs even when the specs fail, and that is the
+   * run where leftover rows actually cost somebody an afternoon.
+   *
+   * Against a deployed target, `authed` is left out entirely. The specs assert development-time
+   * facts - a 404 for staff, a dialog's computed contrast - and creating accounts against whatever
+   * PLAYWRIGHT_BASE_URL points at is not a thing a test should decide to do.
+   */
+  projects: [
+    {
+      name: "public",
+      testIgnore: ["**/settings.spec.ts", "**/auth.setup.ts", "**/auth.teardown.ts"],
+    },
+    ...(DEPLOYED
+      ? []
+      : [
+          {
+            name: "auth setup",
+            testMatch: /auth\.setup\.ts/,
+            teardown: "auth teardown",
+          },
+          {
+            name: "auth teardown",
+            testMatch: /auth\.teardown\.ts/,
+          },
+          {
+            name: "authed",
+            testMatch: /settings\.spec\.ts/,
+            dependencies: ["auth setup"],
+          },
+        ]),
+  ],
   webServer: DEPLOYED
     ? undefined
     : {

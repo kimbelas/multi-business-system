@@ -82,6 +82,18 @@ export type PersonaName = (typeof PERSONAS)[number];
 export interface Persona {
   name: PersonaName;
   userId: string;
+  /**
+   * The generated password, exposed so a browser can sign in as this persona.
+   *
+   * Was a local in `setUpFixture`, which was enough while the only consumer created its own
+   * Supabase client. The e2e suite signs in through the login form instead - deliberately, because
+   * that exercises the real session path rather than minting a token beside it - and a form needs
+   * the password.
+   *
+   * Safe to hold: it is generated per run, belongs to an account this fixture created and will
+   * delete, and never leaves the test process.
+   */
+  password: string;
   email: string;
   /** Signed in, anon key, subject to RLS. This is the client every assertion uses. */
   db: SupabaseClient;
@@ -184,7 +196,7 @@ export async function setUpFixture(env: RlsEnv): Promise<Fixture> {
       const signIn = await db.auth.signInWithPassword({ email, password });
       if (signIn.error) throw new Error(`could not sign in ${name}: ${signIn.error.message}`);
 
-      personas[name] = { name, userId, email, db };
+      personas[name] = { name, userId, email, password, db };
     }
 
     // ---------------------------------------------------------------- tenancy

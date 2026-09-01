@@ -60,6 +60,11 @@ jobs:
           # a fork, or on a repository where nobody has added a secret yet.
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321' }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'ci-placeholder-anon-key' }}
+          # No placeholder for this one, deliberately. It is what the authenticated suite uses to
+          # create its personas, and without it `rlsEnv` returns null, the setup project skips and
+          # the signed-in specs skip with it. A placeholder would make them attempt a sign-in
+          # against a project that is not there and fail for the wrong reason.
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
   bundle:
     # Card #15: the bundle budget is a CI gate, not a habit. The Workers free plan caps a
