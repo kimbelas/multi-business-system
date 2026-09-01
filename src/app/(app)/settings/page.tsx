@@ -2,6 +2,7 @@ import { Chip, RoleChip } from "@/components/ui/chip";
 import { Swatch } from "@/components/ui/swatch";
 import { requireCapability } from "@/lib/authz";
 import { businessLabel } from "@/lib/business";
+import { controlsFor } from "@/lib/roster-controls";
 import { loadRoster } from "@/lib/roster";
 import { CreateBranchForm, CreateBusinessForm } from "./create-forms";
 import { INVITE_HEADING_ID, InviteForm } from "./invite-form";
@@ -34,6 +35,17 @@ export default async function SettingsPage() {
    * Null means there is no single answer, and the page says so rather than picking.
    */
   const roster = scope.activeOrgId ? await loadRoster(scope.activeOrgId) : [];
+
+  /*
+   * How many owners this organisation has, for the remove dialog's copy - "one of three owners; the
+   * last one cannot be removed". Counted from the roster the screen already read rather than by a
+   * second query, and it is only ever used in a sentence: the guarantee is the database's.
+   *
+   * `?? []` because `loadRoster` answers null for a FAILED read, which is not the same as nobody
+   * being there - the screen renders "Couldn't load people" in that case and no row, so this number
+   * is never shown.
+   */
+  const ownerCount = (roster ?? []).filter((member) => member.role === "owner").length;
 
   const branchName = new Map<string, string>();
   for (const business of scope.businesses) {
@@ -203,24 +215,29 @@ export default async function SettingsPage() {
                   {!member.signedIn && <Chip tone="muted">Not signed in yet</Chip>}
                   <RoleChip role={member.role} />
                   {/*
-                   * No actions on an owner row. Both of them refuse an owner - removal because
-                   * nothing here can grant owner back, a new password because that is an account
-                   * takeover rather than a rescue - so offering them would be a button whose only
-                   * outcome is a refusal, after a confirmation dialog. `lib/rbac.ts`, first
-                   * paragraph: better never offered.
+                   * Which controls this row offers is `controlsFor`'s decision, not this file's.
+                   *
+                   * It used to be `member.role !== "owner"`, which was correct while nothing could
+                   * grant or remove an owner. The obvious replacement - a ternary on the role - is
+                   * wrong: a role belongs to a ROW and these controls belong to a PERSON. Somebody
+                   * promoted to owner still has a branch row saying "manager", and offering "New
+                   * password" there is offering a button `may_reissue_password` refuses for anybody
+                   * who is an owner anywhere.
                    */}
-                  {member.role !== "owner" && (
-                    <MemberActions
-                      membershipId={member.id}
-                      userId={member.userId}
-                      personLabel={member.name ?? "this person"}
-                      whereLabel={
-                        member.branchId
-                          ? (branchName.get(member.branchId) ?? "a branch")
-                          : "the whole organisation"
-                      }
-                    />
-                  )}
+                  <MemberActions
+                    membershipId={member.id}
+                    userId={member.userId}
+                    personLabel={member.name ?? "this person"}
+                    whereLabel={
+                      member.branchId
+                        ? (branchName.get(member.branchId) ?? "a branch")
+                        : "the whole organisation"
+                    }
+                    orgLabel={scope.activeOrgName ?? "this organisation"}
+                    ownerRow={member.role === "owner"}
+                    ownerCount={ownerCount}
+                    {...controlsFor(roster, member, scope.userId)}
+                  />
                 </span>
               </li>
             ))}

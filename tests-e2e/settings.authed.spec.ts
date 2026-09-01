@@ -1,3 +1,4 @@
+import { contrastOf, useTheme } from "./contrast";
 import { expect, requireFixture, test } from "./authed";
 
 /**
@@ -119,10 +120,7 @@ test.describe("the owner", () => {
 
     // A plain loop, because Playwright has no `describe.each` - that is Vitest's, and this file
     // imports from `@playwright/test`.
-    for (const { theme, stored } of [
-      { theme: "light", stored: null },
-      { theme: "dark", stored: "dark" },
-    ] as const) {
+    for (const theme of ["light", "dark"] as const) {
       test(`the confirm button's label clears 4.5:1 in ${theme}`, async ({ page }) => {
         /*
          * The measured failure: `--destructive-strong` is a dark red in light mode and a LIGHT one
@@ -130,99 +128,18 @@ test.describe("the owner", () => {
          * button of a destructive confirmation. `tests/palette.test.ts` cannot see this, because it
          * reads tokens out of `globals.css` rather than a token used as a fill in markup.
          *
-         * Computed here rather than compared against a hex, so it holds if either token moves.
-         *
-         * The first version of this measurement was wrong in the worst available way. It read
-         * `getComputedStyle().color`, pulled the first three numbers out with a regex and treated
-         * them as 0-255 sRGB - and Chrome serialises a computed `oklch()` colour as
-         * `oklab(0.444 0.158 0.076)`. Every channel came out below 1, every luminance collapsed to
-         * roughly zero, and both themes reported a ratio near 1.0: light mode "failed" at 1.09,
-         * where `#991b1b` under `#fef2f2` is about 8:1. It surfaced only because the number was
-         * absurd. Had the nonsense landed above 4.5 it would have passed forever, measuring nothing.
-         *
-         * So the parsing is handed to the browser: a 1x1 canvas normalises ANY colour syntax to
-         * sRGB bytes, a sentinel catches a value it will not parse rather than silently keeping the
-         * previous fill, and the whole thing self-checks against black-on-white being 21:1.
+         * Measured rather than compared against a hex, so it holds if either token moves. The
+         * measurement lives in `contrast.ts`, along with the account of how it was wrong the first
+         * time and what the canvas is for.
          */
         await page.goto("/settings");
-        await page.evaluate((value) => {
-          if (value) localStorage.setItem("theme", value);
-          else localStorage.removeItem("theme");
-        }, stored);
-        await page.reload();
-
-        // Assert the theme actually took. Otherwise the dark case quietly measures the light one,
-        // and the more dangerous of the two tokens never gets looked at.
-        expect(
-          await page.evaluate(() => document.documentElement.classList.contains("dark")),
-          `the ${theme} theme should be applied to the document`,
-        ).toBe(theme === "dark");
+        await useTheme(page, theme);
 
         await page.getByRole("button", { name: "Remove" }).first().click();
         const confirm = page.getByRole("button", { name: "Remove access" });
         await expect(confirm).toBeVisible();
 
-        const ratio = await confirm.evaluate((el) => {
-          const canvas = document.createElement("canvas");
-          canvas.width = 1;
-          canvas.height = 1;
-          const ctx = canvas.getContext("2d")!;
-
-          /** Any CSS colour syntax in, sRGB bytes out: oklab, oklch, rgb, hex or a keyword. */
-          const bytes = (value: string): number[] => {
-            const sentinel = "#123456";
-            ctx.fillStyle = sentinel;
-            ctx.fillStyle = value;
-            if (ctx.fillStyle === sentinel && value !== sentinel) {
-              throw new Error(`the browser would not parse ${value} as a colour`);
-            }
-            ctx.clearRect(0, 0, 1, 1);
-            ctx.fillRect(0, 0, 1, 1);
-            return Array.from(ctx.getImageData(0, 0, 1, 1).data);
-          };
-
-          const lum = ([r, g, b]: number[]) => {
-            const [lr, lg, lb] = [r, g, b].map((c) => {
-              const channel = c / 255;
-              return channel <= 0.04045
-                ? channel / 12.92
-                : Math.pow((channel + 0.055) / 1.055, 2.4);
-            });
-            return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
-          };
-
-          const contrast = (one: number, two: number) => {
-            const [hi, lo] = [one, two].sort((x, y) => y - x);
-            return (hi + 0.05) / (lo + 0.05);
-          };
-
-          /*
-           * A self-check, because the failure this replaces was a measurement that returned a
-           * plausible-looking number instead of an error. If the arithmetic is right this is 21.
-           */
-          const known = contrast(lum(bytes("#ffffff")), lum(bytes("#000000")));
-          if (Math.abs(known - 21) > 0.01) {
-            throw new Error(`the contrast maths is broken: white on black measured ${known}`);
-          }
-
-          /*
-           * The button's own background may be transparent, and treating that as black is exactly
-           * how a bogus ratio gets manufactured. Walk up until something actually paints.
-           */
-          let node: Element | null = el;
-          let background: number[] | null = null;
-          while (node) {
-            const painted = bytes(getComputedStyle(node).backgroundColor);
-            if (painted[3] === 255) {
-              background = painted;
-              break;
-            }
-            node = node.parentElement;
-          }
-          if (!background) throw new Error("nothing above the button paints an opaque background");
-
-          return contrast(lum(bytes(getComputedStyle(el).color)), lum(background));
-        });
+        const ratio = await contrastOf(confirm);
 
         expect(ratio, `the destructive label must be readable in ${theme}`).toBeGreaterThanOrEqual(
           4.5,
@@ -231,11 +148,116 @@ test.describe("the owner", () => {
     }
   });
 
-  test("offers no remove or password control on an owner row", async ({ page }) => {
+  test.describe("the grant-owner dialog", () => {
     /*
-     * Both actions refuse an owner - removal because nothing here can grant owner back, a new
-     * password because that would be a takeover rather than a rescue. `lib/rbac.ts` opens by saying
-     * a screen should not offer a button the database will refuse.
+     * Card 0034. Opened but never confirmed, deliberately - the same rule the rest of this file
+     * follows. The fixture organisation has one owner and one signed-in owner persona, so actually
+     * granting owner mid-run would change what every other assertion in this file means, and it
+     * would be a real owner row in a real project.
+     *
+     * What is asserted is what a screenshot would not tell you: where focus lands, what the copy
+     * commits to, and that the label is readable in both themes.
+     */
+    const openGrantDialog = async (page: import("@playwright/test").Page) => {
+      await page.goto("/settings");
+      await page.getByRole("button", { name: "Make owner" }).first().click();
+      // Two dialogs exist in each row now, so the confirm button's name is what identifies this one.
+      const dialog = page
+        .getByRole("dialog")
+        .filter({ has: page.getByRole("button", { name: "Make them an owner" }) });
+      await expect(dialog).toBeVisible();
+      return dialog;
+    };
+
+    test("is offered on a manager or staff row", async ({ page }) => {
+      // Positively, before anything else asserts what the dialog says: `controlsFor` offers this once
+      // per person, and if it offered it nowhere the tests below would pass by never opening.
+      await page.goto("/settings");
+      await expect(page.getByRole("button", { name: "Make owner" }).first()).toBeVisible();
+    });
+
+    test("opens with focus on Cancel, and Escape closes it", async ({ page }) => {
+      // Handing over the organisation is the last place a dialog should open with the confirm button
+      // focused. Cancel comes first in the DOM, which is what puts focus there.
+      const dialog = await openGrantDialog(page);
+      await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+
+      await page.keyboard.press("Escape");
+      await expect(dialog).not.toBeVisible();
+    });
+
+    test("says what is handed over, and that it points back at the granter", async ({ page }) => {
+      /*
+       * Criterion 2, asserted as three separate claims because they are three separate jobs and a
+       * single `toContainText` over the whole dialog would pass if any one of them were deleted.
+       */
+      const dialog = await openGrantDialog(page);
+
+      // What an owner can do.
+      await expect(dialog).toContainText(/sees every business, branch and peso/i);
+      // That it includes the person granting it.
+      await expect(dialog).toContainText(/can remove your access/i);
+      // That it cannot be undone alone.
+      await expect(dialog).toContainText(/cannot take this back on your own/i);
+      // The verb, not "OK".
+      await expect(dialog.getByRole("button", { name: "Make them an owner" })).toBeVisible();
+    });
+
+    for (const theme of ["light", "dark"] as const) {
+      test(`the confirm button's label clears 4.5:1 in ${theme}`, async ({ page }) => {
+        /*
+         * The same inverting token pair as the remove dialog, and the same reason it is measured
+         * rather than eyeballed: `--destructive-strong` is dark in light mode and light in dark, so a
+         * fixed foreground is readable in exactly one of them.
+         */
+        await page.goto("/settings");
+        await useTheme(page, theme);
+
+        await page.getByRole("button", { name: "Make owner" }).first().click();
+        const confirm = page.getByRole("button", { name: "Make them an owner" });
+        await expect(confirm).toBeVisible();
+
+        expect(
+          await contrastOf(confirm),
+          `the grant confirmation must be readable in ${theme}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+
+    test("every control in a roster row is at least 44px tall", async ({ page }) => {
+      /*
+       * Measured on the rendered element, which nothing in this repository did before: the 46px
+       * `--pill-h` token is asserted by a unit test, and a token is not a control. A third button in
+       * this row is exactly the change that would tempt somebody to shrink them.
+       */
+      await page.goto("/settings");
+      const row = page.getByRole("listitem").filter({ hasText: "Not signed in yet" }).first();
+      await expect(row).toBeVisible();
+
+      const buttons = row.getByRole("button");
+      const count = await buttons.count();
+      expect(count, "the row should carry controls to measure").toBeGreaterThan(0);
+
+      for (let index = 0; index < count; index += 1) {
+        const box = await buttons.nth(index).boundingBox();
+        const name = await buttons.nth(index).textContent();
+        expect(
+          box?.height ?? 0,
+          `"${name?.trim()}" is below the 44px hit area`,
+        ).toBeGreaterThanOrEqual(44);
+      }
+    });
+  });
+
+  test("offers no remove or password control on the only owner's row", async ({ page }) => {
+    /*
+     * Still true, and true for a DIFFERENT reason since card 0034 - which is worth stating, because a
+     * test that keeps passing for a reason nobody chose is not evidence of anything.
+     *
+     * It used to be "an owner row never has controls", because nothing in the app could grant owner
+     * back. Now removal is offered on an owner row whenever another owner remains. The fixture has
+     * exactly one owner, so `controlsFor` withholds it here on the count - and a new password is
+     * still withheld because `may_reissue_password` refuses anybody who is an owner anywhere.
      *
      * The owner row is the one showing "Whole organisation", since an owner grant names no branch.
      */

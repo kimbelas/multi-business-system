@@ -215,12 +215,14 @@ export async function revokeGrant(
   form: FormData,
 ): Promise<ActionResult> {
   /*
-   * Called for its refusal, not its return value. This action used to compare `scope.userId`
-   * against the row's owner; it refuses every owner row now - see the note further down for why
-   * counting them was not enough - so nothing here needs to know WHO is asking, only that they are
-   * allowed to ask at all.
+   * Who is asking matters again, which reverses what this comment used to say.
+   *
+   * The previous version refused every owner row, so it needed nothing but permission to ask. Now
+   * that `grantOwner` exists, removing an owner is a legitimate operation - and the one case that is
+   * still refused is the caller's OWN owner grant, which cannot be checked without knowing who they
+   * are.
    */
-  await requireCapability("manageOrganisation");
+  const scope = await requireCapability("manageOrganisation");
 
   const membershipId = String(form.get("membershipId") ?? "");
   if (!membershipId) return fail("Nothing was selected.");
@@ -230,15 +232,14 @@ export async function revokeGrant(
   /*
    * Read the row before deleting it, for two reasons that are not the same.
    *
-   * The first is the lockout. An owner revoking their own org-wide grant loses `owned_org_ids()`,
-   * which is the basis of every policy that lets them manage anything - including this screen and
-   * this action. There is no path back through the app: the only fix is SQL against the database,
-   * which is precisely what card 0019 exists to stop being necessary. So it is refused.
+   * The first is that the decisions below - whose grant, which organisation, what role - are about
+   * the row on disk and not about what the client said. The client sends an id; everything else is
+   * re-read.
    *
    * The second is loudness. RLS would make a foreign row's delete affect zero rows rather than
-   * error, and Next's guidance on destructive operations asks for "a loud failure when those
-   * checks miss" - a silent success on a delete that deleted nothing is the worst available
-   * outcome for an action whose whole job is removing access.
+   * error, and Next's guidance on destructive operations asks for "a loud failure when those checks
+   * miss" - a silent success on a delete that deleted nothing is the worst available outcome for an
+   * action whose whole job is removing access.
    */
   const { data: row, error: readError } = await supabase
     .from("memberships")
@@ -250,41 +251,62 @@ export async function revokeGrant(
   if (!row) return fail("That grant no longer exists, or it is not yours to change.");
 
   /*
-   * The owner rules, which the first version got wrong in both directions.
-   *
-   * It refused "my own org-wide owner row", which is neither necessary nor sufficient.
-   *
-   * Not sufficient: an owner could revoke ANOTHER owner. Nothing in this app can create an owner
-   * grant - `inviteStaff` deliberately refuses to - so the person removed is locked out
-   * permanently and the only way back is SQL, which is precisely the outcome the guard was written
-   * to prevent, aimed at somebody else.
-   *
-   * Not necessary: `unique (user_id, org_id, branch_id)` uses the default NULLS DISTINCT, so two
-   * org-wide owner rows for the same person in the same org are permitted. Removing one of those
-   * locks nobody out, and the old condition refused it - leaving a duplicate that could only be
-   * cleared in SQL.
-   *
-   * So: count the owners rather than compare identities. Losing the last one orphans the
-   * organisation; losing somebody else's is unrecoverable until this screen can grant owner.
+   * Coming back through RLS is not the same as being in an org this person owns.
+   * `membership_self_read` also returns the caller's own rows, including ones in an organisation
+   * where they are merely staff. `ownedOrgIds` is the set a write may name - `activeOrgId` is where
+   * they are looking, which is a different question and explicitly not this one.
    */
-  /*
-   * No owner grant is removable here, and that is the honest version of a guard that used to be
-   * subtler and wrong.
-   *
-   * It refused "my own org-wide owner row", which let an owner remove ANOTHER owner - unrecoverable,
-   * since `INVITABLE` is manager and staff, so nothing in this app can grant owner back. Counting
-   * owners fixed the org-orphaning case but still permitted a self-revoke when a second owner
-   * existed: the delete succeeded, `revalidatePath` re-rendered, `requireCapability` no longer saw
-   * an owner grant, and the person landed on a bare 404 having been told the action was reversible.
-   *
-   * Since nothing here can undo it, nothing here does it. The dialog can now say "can be given
-   * access again later" and be telling the truth for every row it is offered on.
-   */
+  if (!scope.ownedOrgIds.includes(row.org_id)) {
+    return fail("That grant is not in an organisation you own.");
+  }
+
   if (row.role === "owner") {
-    return fail(
-      "Owner access cannot be removed here — nothing in this app can grant it back, so it would " +
-        "take a database change to undo. Do it there if you mean it.",
-    );
+    /*
+     * Your own owner grant is still refused, and this is a design decision rather than a leftover.
+     *
+     * Removing it costs you `owned_org_ids()`, which is the basis of every policy behind this screen
+     * and behind this action - so the delete would succeed, `revalidatePath` would re-render, and
+     * `requireCapability` would no longer see an owner grant. You would land on a bare 404, having
+     * just been shown a confirmation.
+     *
+     * Card 0034 supplies a better mechanism than a self-revoke, and the grant confirmation says so
+     * out loud: hand owner to the person taking over, and they remove you. Nobody has to remove
+     * themselves, so nothing is lost by refusing it.
+     */
+    if (row.user_id === scope.userId) {
+      return fail(
+        "You cannot remove your own owner access here \u2014 it would take away this screen " +
+          "mid-click. Grant owner to the person taking over, then have them remove you.",
+      );
+    }
+
+    /*
+     * Counted, not compared, which is the mistake the first version of this action made in both
+     * directions: it refused a harmless duplicate and permitted removing the second-to-last owner.
+     * The question is how many owner rows remain, whoever they belong to.
+     *
+     * This check is for the MESSAGE, not for the guarantee. It races - two revokes in two requests
+     * each see two owners - and it is not even on the only path, because `membership_owner_all` is
+     * `for all` and a signed-in owner can DELETE straight through PostgREST. The enforcement is
+     * `assert_org_keeps_an_owner`; this turns the case the app CAN see coming into a sentence.
+     *
+     * `owners === null` must fail rather than pass, for the same reason `count !== 1` is spelled
+     * that way below: a missing content-range header must never read as "no owners are in the way".
+     */
+    const { count: owners, error: countError } = await supabase
+      .from("memberships")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", row.org_id)
+      .eq("role", "owner");
+
+    if (countError) return fail(`Could not count the owners: ${countError.message}`);
+    if (owners === null) return fail("Could not count the owners, so nothing was changed.");
+    if (owners <= 1) {
+      return fail(
+        "This is the organisation's only owner, and an organisation cannot be left without one. " +
+          "Grant owner to somebody else first.",
+      );
+    }
   }
 
   const { error: deleteError, count } = await supabase
@@ -292,7 +314,19 @@ export async function revokeGrant(
     .delete({ count: "exact" })
     .eq("id", membershipId);
 
-  if (deleteError) return fail(`Could not remove access: ${deleteError.message}`);
+  if (deleteError) {
+    /*
+     * 23001 is `assert_org_keeps_an_owner`. Recognised rather than forwarded: the raw message names
+     * a uuid and a trigger, which is true and useless to the person reading it.
+     */
+    if (deleteError.code === "23001") {
+      return fail(
+        "That would leave the organisation with no owner, so the database refused it. Grant owner " +
+          "to somebody else first.",
+      );
+    }
+    return fail(`Could not remove access: ${deleteError.message}`);
+  }
   /*
    * `count !== 1`, not `count === 0`.
    *
@@ -308,6 +342,105 @@ export async function revokeGrant(
 
   revalidatePath("/settings");
   return { ok: true, message: "Access removed." };
+}
+
+/**
+ * Hand org-wide owner to somebody who already holds a grant here. Card 0034.
+ *
+ * Deliberately not part of the invite form. An owner grant is org-wide by constraint
+ * (`owner_is_org_wide` requires a null branch), so it cannot be scoped to the branch that form
+ * collects - which is why `INVITABLE` is manager and staff, and stays that way.
+ *
+ * ## The reference is a grant, not a person
+ *
+ * The client sends the id of an EXISTING membership row and everything else is re-read from it. Three
+ * things then follow structurally rather than being validated afterwards: criterion 1's "somebody who
+ * already has an account and a grant in that organisation" cannot be violated, because there is no
+ * way to name somebody who has neither; the organisation comes from a row rather than from the
+ * session; and a stranger cannot be promoted, because a stranger has no row.
+ *
+ * ## It counts nothing
+ *
+ * Granting can only increase the number of owners, so there is no invariant here to protect. The
+ * counting lives in `revokeGrant` and, because that count races and the app is not PostgREST's only
+ * client, in `assert_org_keeps_an_owner`.
+ */
+export async function grantOwner(
+  _prev: ActionResult | null,
+  form: FormData,
+): Promise<ActionResult> {
+  // First statement, not a decoration. A Server Action is a POST endpoint; the route guard protects
+  // the render, and this protects the endpoint.
+  const scope = await requireCapability("manageOrganisation");
+
+  const membershipId = String(form.get("membershipId") ?? "");
+  if (!membershipId) return fail("Nothing was selected.");
+
+  const supabase = await createClient();
+
+  const { data: row, error: readError } = await supabase
+    .from("memberships")
+    .select("id, user_id, role, branch_id, org_id")
+    .eq("id", membershipId)
+    .maybeSingle();
+
+  if (readError) return fail(`Could not read that grant: ${readError.message}`);
+  if (!row) return fail("That grant no longer exists, or it is not yours to change.");
+
+  // Same reasoning as `revokeGrant`: RLS returning the row is not the same as owning its org.
+  if (!scope.ownedOrgIds.includes(row.org_id)) {
+    return fail("That grant is not in an organisation you own.");
+  }
+  if (row.user_id === scope.userId) return fail("You are already an owner here.");
+  if (row.role === "owner") return fail("They are already an owner of this organisation.");
+
+  /*
+   * Their name, re-read rather than taken from the form. The dialog may render a name the client
+   * supplied - that is only display - but a result MESSAGE naming somebody is a claim about what the
+   * database now says, so it comes from the database.
+   */
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name")
+    .eq("id", row.user_id)
+    .maybeSingle();
+
+  /*
+   * Through the owner's own session, not the service role. `membership_owner_all` already permits
+   * exactly this insert, and using the admin client would bypass a policy that is willing to allow
+   * the operation - on the one write that decides who controls the organisation. The service role is
+   * for the two things RLS genuinely cannot do, and this is not one of them.
+   *
+   * INSERT rather than an UPDATE of their existing row: an owner grant is an addition. Converting
+   * their branch grant would silently remove access nobody asked to remove, and the roster keys rows
+   * by user and branch, so the person simply appears twice - which is what the data says.
+   * `memberships_one_org_wide_grant_per_person` is what stops a double click making two of these.
+   */
+  const granted = await supabase.from("memberships").insert({
+    user_id: row.user_id,
+    org_id: row.org_id,
+    branch_id: null,
+    role: "owner",
+  });
+
+  if (granted.error) {
+    // An RLS refusal on INSERT is an error rather than a no-op, so unlike a DELETE this failure is
+    // loud without needing a count.
+    const duplicate = granted.error.code === "23505";
+    return fail(
+      duplicate
+        ? "They are already an owner of this organisation."
+        : `Could not grant owner: ${granted.error.message}`,
+    );
+  }
+
+  revalidatePath("/settings");
+  return {
+    ok: true,
+    message:
+      `${profile?.full_name ?? "They"} is now an owner. They can see everything in the ` +
+      `organisation, and they can remove your access.`,
+  };
 }
 
 /**

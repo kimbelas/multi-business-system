@@ -338,19 +338,37 @@ describeRls("row level security", () => {
        * skips the check when any referenced column is null, which is exactly the shape
        * `owner_is_org_wide` requires - so this is the assertion that tells a working constraint
        * apart from one that has broken every owner in the system.
+       *
+       * The probe row goes in `f.orgId`, NOT `f.otherOrgId`, and the delete's error is checked.
+       * Both were changed by card 0034 and neither is cosmetic: `otherOrgId` holds no memberships,
+       * so this row would have been that organisation's ONLY owner, and
+       * `assert_org_keeps_an_owner` refuses removing the last one. With the error discarded, the
+       * test still passed, left an owner row behind for the rest of the run, and turned the e2e
+       * teardown - which does check its errors - red on every run afterwards. `f.orgId` already has
+       * the owner persona's grant, so the probe is never the last one.
        */
       const inserted = await f.admin
         .from("memberships")
         .insert({
           user_id: f.personas.outsider.userId,
-          org_id: f.otherOrgId,
+          org_id: f.orgId,
           branch_id: null,
           role: "owner",
         })
         .select("id")
         .single();
       expect(inserted.error?.message ?? null).toBeNull();
-      await f.admin.from("memberships").delete().eq("id", inserted.data!.id);
+
+      try {
+        expect(inserted.data?.id).toBeTruthy();
+      } finally {
+        const removed = await f.admin
+          .from("memberships")
+          .delete({ count: "exact" })
+          .eq("id", inserted.data!.id);
+        expect(removed.error?.message ?? null).toBeNull();
+        expect(removed.count, "the probe row must not survive this test").toBe(1);
+      }
     });
 
     it("keeps the owner of one org out of another", async () => {
@@ -762,6 +780,199 @@ describeRls("row level security", () => {
           .eq("id", businessId);
         expect(business.data).toEqual([]);
       });
+    });
+  });
+
+  describe("granting owner", () => {
+    it("is allowed for an owner, through RLS rather than the service role", async () => {
+      /*
+       * The positive half of `membership_owner_all` that nothing asserted. Every owner row in this
+       * fixture is inserted with the service role, which bypasses the policy entirely - so "an owner
+       * can grant owner" was an assumption about a policy nobody had exercised. `grantOwner` runs
+       * through the owner's own session deliberately, and this is the assertion behind that choice.
+       */
+      const granted = await f.personas.owner.db
+        .from("memberships")
+        .insert({
+          user_id: f.personas.staffB.userId,
+          org_id: f.orgId,
+          branch_id: null,
+          role: "owner",
+        })
+        .select("id")
+        .single();
+      expect(granted.error?.message ?? null).toBeNull();
+
+      try {
+        // And they are a real owner at once, on a session signed in before the grant existed - the
+        // same per-request claim the revoke and closed-branch tests make from the other direction.
+        const owned = await f.personas.staffB.db.rpc("owned_org_ids");
+        expect(owned.data).toEqual([f.orgId]);
+      } finally {
+        // Safe to remove: the fixture owner's row is still there, so this is not the last one.
+        const removed = await f.admin
+          .from("memberships")
+          .delete({ count: "exact" })
+          .eq("id", granted.data!.id);
+        expect(removed.error?.message ?? null).toBeNull();
+        expect(removed.count).toBe(1);
+      }
+    });
+
+    it("refuses a second identical owner row for the same person", async () => {
+      /*
+       * `unique (user_id, org_id, branch_id)` uses the default NULLS DISTINCT, so two identical
+       * org-wide owner rows were legal - unreachable while nothing could grant owner, and one double
+       * click away once it can. It also decides whether COUNTING owner rows is a correct way to ask
+       * "does this org still have an owner": with duplicates allowed, two rows can mean one person.
+       */
+      const first = await f.admin
+        .from("memberships")
+        .insert({
+          user_id: f.personas.outsider.userId,
+          org_id: f.orgId,
+          branch_id: null,
+          role: "owner",
+        })
+        .select("id")
+        .single();
+      expect(first.error?.message ?? null).toBeNull();
+
+      try {
+        const second = await f.admin.from("memberships").insert({
+          user_id: f.personas.outsider.userId,
+          org_id: f.orgId,
+          branch_id: null,
+          role: "owner",
+        });
+        expect(second.error?.code, "memberships_one_org_wide_grant_per_person").toBe("23505");
+      } finally {
+        const removed = await f.admin
+          .from("memberships")
+          .delete({ count: "exact" })
+          .eq("id", first.data!.id);
+        expect(removed.error?.message ?? null).toBeNull();
+        expect(removed.count).toBe(1);
+      }
+    });
+  });
+
+  describe("the last owner", () => {
+    it("cannot be removed, counted rather than compared", async () => {
+      /*
+       * The mistake this is written against: the first `revokeGrant` compared `scope.userId` to the
+       * row's owner, which permitted removing ANOTHER owner and refused removing a harmless
+       * duplicate. The invariant is about how many owner rows remain, not whose they are - so this
+       * creates two owner rows belonging to two DIFFERENT people, removes one, and asserts the
+       * survivor is immovable whichever it turned out to be.
+       *
+       * In an organisation of its own, because an owner row that is the last one in its org cannot be
+       * deleted at all - that is the point - so making one inside `f.orgId` or `f.otherOrgId` would
+       * either poison the fixture or be impossible to clean up.
+       *
+       * Against the SERVICE ROLE deliberately: that key bypasses every policy and does not bypass a
+       * trigger, and it is the key the invite path runs with. A guard that only holds for the anon
+       * key is not a guard on this system.
+       */
+      const org = await f.admin
+        .from("organizations")
+        .insert({ name: `rls-owners ${f.runId}` })
+        .select("id")
+        .single();
+      expect(org.error?.message ?? null).toBeNull();
+      const orgId: string = org.data!.id;
+
+      try {
+        const rows = await f.admin
+          .from("memberships")
+          .insert([
+            { user_id: f.personas.outsider.userId, org_id: orgId, branch_id: null, role: "owner" },
+            { user_id: f.personas.staffB.userId, org_id: orgId, branch_id: null, role: "owner" },
+          ])
+          .select("id");
+        expect(rows.error?.message ?? null).toBeNull();
+        expect(rows.data?.length).toBe(2);
+        const [one, two] = rows.data!;
+
+        // Two owners: either row may go. Asserted first, so a guard that refuses everything cannot
+        // pass this test.
+        const first = await f.admin.from("memberships").delete({ count: "exact" }).eq("id", one.id);
+        expect(first.error?.message ?? null).toBeNull();
+        expect(first.count).toBe(1);
+
+        // One owner: immovable, and the reason is the count rather than who they are.
+        const last = await f.admin.from("memberships").delete({ count: "exact" }).eq("id", two.id);
+        expect(last.error, "the last owner row must not be removable").not.toBeNull();
+        expect(last.error?.code, "restrict_violation from assert_org_keeps_an_owner").toBe("23001");
+
+        // Emptying them in one statement is not a way round it. This is the shape a client can send
+        // straight to PostgREST without passing through any server action.
+        const sweep = await f.admin
+          .from("memberships")
+          .delete()
+          .eq("org_id", orgId)
+          .eq("role", "owner");
+        expect(sweep.error?.code, "a bulk delete is refused the same way").toBe("23001");
+
+        const survivors = await f.admin
+          .from("memberships")
+          .select("id", { count: "exact", head: true })
+          .eq("org_id", orgId)
+          .eq("role", "owner");
+        expect(survivors.count, "exactly one owner survived every attempt").toBe(1);
+      } finally {
+        /*
+         * The organisation, not the membership: the last owner row cannot be deleted while its org
+         * exists, so this cascade is the only way out. It is also the arm both teardowns depend on -
+         * without the "org no longer exists" exemption in the trigger, every organisation would
+         * become undeletable and the e2e teardown would go red on every run - so asserting it here
+         * is not tidiness.
+         */
+        const gone = await f.admin.from("organizations").delete().eq("id", orgId);
+        expect(gone.error, "deleting an organisation must cascade its last owner away").toBeNull();
+      }
+    });
+
+    it("cannot be demoted either, which is the same hole spelled as an update", async () => {
+      /*
+       * `update memberships set role = 'manager', branch_id = <a branch>` leaves the org with no
+       * owner and deletes nothing. The branch has to be real and in the same org, or
+       * `staff_needs_branch` refuses it first and this test passes on 23514 - a different constraint
+       * doing a different job. That happened on the first run of the local experiment, which is why
+       * the sqlstate is asserted rather than "an error occurred".
+       */
+      const demoted = await f.admin
+        .from("memberships")
+        .update({ role: "manager", branch_id: f.branchA })
+        .eq("org_id", f.orgId)
+        .eq("role", "owner")
+        .is("branch_id", null);
+
+      expect(demoted.error?.code, "a demotion of the last owner must be refused with 23001").toBe(
+        "23001",
+      );
+
+      // And nothing moved: the fixture's owner is still an owner, which every later test assumes.
+      const owners = await f.admin
+        .from("memberships")
+        .select("id", { count: "exact", head: true })
+        .eq("org_id", f.orgId)
+        .eq("role", "owner");
+      expect(owners.count).toBe(1);
+    });
+
+    it("cannot remove their own owner grant through RLS either", async () => {
+      /*
+       * The app refuses a self-revoke with a sentence; this is what makes the refusal true for a
+       * caller who never goes near a server action. `membership_owner_all` is `for all`, so this
+       * request is one the policy would otherwise allow.
+       */
+      const attempt = await f.personas.owner.db
+        .from("memberships")
+        .delete({ count: "exact" })
+        .eq("org_id", f.orgId)
+        .eq("role", "owner");
+      expect(attempt.error?.code).toBe("23001");
     });
   });
 
