@@ -38,6 +38,40 @@ import pg from "pg";
 
 const FILE = path.join(process.cwd(), "supabase", "bootstrap-owner.sql");
 
+/**
+ * Did the file achieve its purpose? Asked separately from "did anything change".
+ *
+ * A review found that this script passed for a file that can no longer bootstrap ANYTHING. Mistype
+ * the email and the `owner` CTE is empty, so `needed` is empty, so both runs insert nothing, so the
+ * counts match and it reports PASS - while on a fresh database that file would silently produce no
+ * organisation at all. That is card 0041's original failure mode with a certificate attached.
+ *
+ * So idempotence is not the only thing asserted. After the first run the named account must hold an
+ * org-wide owner grant, which is the one row this whole file exists to create: RLS is the only
+ * authorization layer, and without it the account signs in and reads nothing.
+ */
+const OWNER_GRANT = `
+  select count(*)::int as grants
+  from public.memberships m
+  join public.profiles p on p.id = m.user_id
+  join auth.users u on u.id = p.id
+  where u.email = $1
+    and m.role = 'owner'
+    and m.branch_id is null`;
+
+/** The email the file names, read from the file rather than repeated here. */
+function ownerEmailFrom(sql) {
+  const matches = [...sql.matchAll(/email\s*=\s*'([^']+)'/gi)].map((m) => m[1]);
+  const unique = [...new Set(matches)];
+  if (unique.length !== 1) {
+    throw new Error(
+      `expected exactly one email address in bootstrap-owner.sql, found ${unique.length}. ` +
+        "Refusing to run: this script cannot say whose grant to check for.",
+    );
+  }
+  return unique[0];
+}
+
 const COUNTS = `
   select
     (select count(*) from public.organizations) as orgs,
@@ -67,10 +101,37 @@ function stripOuterTransaction(sql) {
         `${commits}. Refusing to run: this script can only contain the file it understands.`,
     );
   }
-  if (/^\s*(commit|begin|rollback)\s*;\s*$/gim.test(stripped)) {
+  /*
+   * `end` is an accepted synonym for `commit` in Postgres, as are `commit work` and `commit
+   * transaction`. A review pointed out that the exact-one check above is satisfied by a file spelled
+   * `begin; … commit; … end;` - and the surviving `end;` would commit the caller's transaction,
+   * reproducing the accident this script exists to prevent, with the script asserting safety.
+   */
+  if (/^\s*(commit|begin|rollback|end|abort|start)\b/gim.test(stripped)) {
     throw new Error("transaction control survived the strip; refusing to run");
   }
   return stripped;
+}
+
+/**
+ * Are we still inside a transaction? Asked of the server, not of a regex.
+ *
+ * `savepoint` outside a transaction block raises 25P01, so this is a positive check that the file did
+ * not commit - which is the thing the text scan above can only guess at. The scan stays because it
+ * refuses BEFORE anything runs; this catches whatever the scan did not understand, between the two
+ * runs and before the rollback is relied on.
+ */
+async function assertStillInTransaction(client, when) {
+  try {
+    await client.query("savepoint bootstrap_check_probe");
+    await client.query("release savepoint bootstrap_check_probe");
+  } catch (error) {
+    throw new Error(
+      `the transaction is gone ${when} (${error?.code ?? "unknown"}). The file committed itself, ` +
+        "so nothing here can be rolled back. Check it for transaction control this script did not " +
+        "recognise, and check the database for what it wrote.",
+    );
+  }
 }
 
 const url = process.env.SUPABASE_DB_URL ?? process.env.BOOTSTRAP_CHECK_DB_URL;
@@ -84,18 +145,74 @@ if (!url) {
   process.exit(1);
 }
 
-const sql = stripOuterTransaction(readFileSync(FILE, "utf8"));
-const client = new pg.Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
+const source = readFileSync(FILE, "utf8");
+const sql = stripOuterTransaction(source);
+const ownerEmail = ownerEmailFrom(source);
+
+/*
+ * TLS, verified when it can be - and said out loud when it cannot.
+ *
+ * A review flagged that `rejectUnauthorized: false` accepts any certificate on a connection carrying
+ * the database password. Correct. The first attempt at the fix simply turned verification on, with a
+ * comment asserting that Supabase's pooler presents a publicly trusted certificate. It does not:
+ * connecting that way fails with SELF_SIGNED_CERT_IN_CHAIN, because the pooler's chain is rooted in
+ * Supabase's own CA rather than a browser-trusted one.
+ *
+ * So: point `SUPABASE_CA_CERT` at that certificate - the project dashboard offers it as a download -
+ * and the connection is verified properly. Without it the connection is still encrypted but the
+ * endpoint is unverified, which the run says on its own line rather than leaving in a default.
+ *
+ * Not defaulted to failing, because a check nobody can run protects nothing, and the alternative
+ * for anyone without the cert to hand would be to reach for the env var that turns verification off
+ * everywhere.
+ */
+const caPath = process.env.SUPABASE_CA_CERT;
+const ssl = caPath
+  ? { ca: readFileSync(caPath, "utf8"), rejectUnauthorized: true }
+  : { rejectUnauthorized: false };
+if (!caPath) {
+  console.warn(
+    "note: the server certificate is NOT verified. The connection is encrypted, but set\n" +
+      "      SUPABASE_CA_CERT to the project's CA certificate to verify the endpoint too.",
+  );
+}
+
+const client = new pg.Client({ connectionString: url, ssl, connectionTimeoutMillis: 15_000 });
 
 await client.connect();
 await client.query("begin");
+/*
+ * Bounded, because an open transaction on the target holds row locks on `organizations`,
+ * `businesses`, `branches` and `memberships` and blocks VACUUM. If this script stalls or its process
+ * is suspended, the server ends the transaction rather than the database waiting on a developer's
+ * laptop.
+ */
+await client.query("set local statement_timeout = '30s'");
+await client.query("set local idle_in_transaction_session_timeout = '60s'");
 
 let failed = false;
 try {
   const before = (await client.query(COUNTS)).rows[0];
+
   await client.query(sql);
+  await assertStillInTransaction(client, "after the first run");
   const afterOne = (await client.query(COUNTS)).rows[0];
+
+  /*
+   * The file did its job, before asking whether it does it twice. Without this, a file that inserts
+   * nothing at all - a mistyped email, a renamed table - passes the idempotence check perfectly.
+   */
+  const { grants } = (await client.query(OWNER_GRANT, [ownerEmail])).rows[0];
+  if (grants < 1) {
+    failed = true;
+    console.error(
+      `FAIL: after one run, ${ownerEmail} holds no org-wide owner grant. The file inserted nothing ` +
+        "useful, which an idempotence check alone would have called a pass.",
+    );
+  }
+
   await client.query(sql);
+  await assertStillInTransaction(client, "after the second run");
   const afterTwo = (await client.query(COUNTS)).rows[0];
 
   const show = (label, row) =>
@@ -104,13 +221,15 @@ try {
   console.log(show("after one", afterOne));
   console.log(show("after two", afterTwo));
 
+  console.log(`owner grant  ${ownerEmail}: ${grants}`);
+
   const same = Object.keys(afterOne).every((key) => afterOne[key] === afterTwo[key]);
   if (!same) {
     failed = true;
     console.error(
       "\nFAIL: the second run changed the database. bootstrap-owner.sql is not idempotent.",
     );
-  } else {
+  } else if (!failed) {
     const created = before.orgs !== afterOne.orgs;
     console.log(
       `\nPASS: the second run changed nothing.${
