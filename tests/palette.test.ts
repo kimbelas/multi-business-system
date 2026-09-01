@@ -141,3 +141,55 @@ describe("the chart slots alias the domain", () => {
     expect(new Set(slots).size).toBe(slots.length);
   });
 });
+
+describe("the hex comments beside the tokens", () => {
+  /*
+   * Card 0038. Ten of the seventeen were wrong, and one of them mattered: a contrast figure was
+   * expected near 8.3:1 on the strength of `--destructive-strong: /* #991b1b *\/` when the token
+   * renders #9f0712 and the real ratio is 7.64:1. Small enough to shrug at, large enough to hide
+   * something. The hexes came from a shadcn palette the oklch values were later tuned away from, so
+   * the drift was systematic rather than a typo.
+   *
+   * A test rather than a one-off correction, because a comment nothing checks drifts again. This is
+   * the whole reason the card asked for the measurement to be reproducible.
+   *
+   * Tolerance is one unit per channel, and that number is measured rather than chosen: this
+   * converter and Chrome's (via a 1x1 canvas and getImageData) agree exactly on sixteen of the
+   * seventeen tokens and differ by one unit of green on the seventeenth. Zero tolerance would make
+   * the suite fight a rounding boundary; anything looser would have let #991b1b stand, which was
+   * off by twenty units of green.
+   */
+  const TOLERANCE = 1;
+
+  const commented = SOURCE.split("\n")
+    .map((line, index) => ({ line, number: index + 1 }))
+    .map(({ line, number }) => {
+      const match = line.match(/^\s*(--[\w-]+):\s*oklch\(([^)]*)\);\s*\/\*\s*(#[0-9a-fA-F]{6})/);
+      if (match === null) return null;
+      const [l, c, h] = match[2].trim().split(/\s+/).map(Number);
+      return { number, name: match[1], oklch: { l, c, h }, claimed: match[3].toLowerCase() };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+  it("finds the tokens to check, so this cannot pass by matching nothing", () => {
+    // The failure shape this suite has produced before: a scan whose regex stops matching reports
+    // green forever. If the annotation style changes, this fails and says so.
+    expect(commented.length).toBeGreaterThanOrEqual(15);
+  });
+
+  it.each(commented)("$name on line $number renders $claimed", ({ oklch, claimed }) => {
+    const { r, g, b } = oklchToRgb(oklch);
+    const actual = [r, g, b].map((channel) => Math.round(Math.max(0, Math.min(1, channel)) * 255));
+    const expected = [1, 3, 5].map((at) => parseInt(claimed.slice(at, at + 2), 16));
+
+    const hex = (channels: number[]) =>
+      "#" + channels.map((v) => v.toString(16).padStart(2, "0")).join("");
+
+    actual.forEach((channel, index) => {
+      expect(
+        Math.abs(channel - expected[index]),
+        `${claimed} is claimed, ${hex(actual)} is rendered`,
+      ).toBeLessThanOrEqual(TOLERANCE);
+    });
+  });
+});

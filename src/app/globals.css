@@ -183,10 +183,10 @@
   /* Muted text, overriding shadcn's oklch(0.556 0 0) - about 3.1:1 on white, which is below the
    * 4.5:1 small-text floor and was carrying real labels. This measures 4.86:1. The old value was
    * inherited from the generated block rather than chosen, which is how it went unexamined. */
-  --muted-foreground: oklch(0.5231 0.0243 258.3); /* #697280 */
+  --muted-foreground: oklch(0.5231 0.0243 258.3); /* #616a78 */
 
   /* Ink, cooled very slightly to sit with the new ground. 15.02:1 on the card. */
-  --foreground: oklch(0.2542 0.0129 264.4); /* #22272e */
+  --foreground: oklch(0.2542 0.0129 264.4); /* #1f2329 */
 
   /* ---------------------------------------------------------------- accent */
 
@@ -211,19 +211,19 @@
   /* ---------------------------------------------------------------- status */
 
   /* Direction on a number, in tile subtitles. Never a surface, never a fill. */
-  --good: oklch(0.627 0.194 149.214); /* #16a34a */
-  --warn: oklch(0.681 0.162 75.834); /* #ca8a04 */
+  --good: oklch(0.627 0.194 149.214); /* #00a63e */
+  --warn: oklch(0.681 0.162 75.834); /* #d08700 */
 
   /* shadcn has one destructive colour; the un-closed-branch card needs three. */
   --destructive-surface: oklch(0.971 0.013 17.38); /* #fef2f2 */
-  --destructive-border: oklch(0.885 0.062 18.334); /* #fecaca */
-  --destructive-strong: oklch(0.444 0.177 26.899); /* #991b1b */
+  --destructive-border: oklch(0.885 0.062 18.334); /* #ffc9c9 */
+  --destructive-strong: oklch(0.444 0.177 26.899); /* #9f0712 */
 
   /* ---------------------------------------------------------------- businesses */
 
-  --biz-laundry: oklch(0.532 0.131 244.05); /* #0072b2  Okabe-Ito blue */
-  --biz-spa: oklch(0.62 0.128 165.46); /* #009e73  Okabe-Ito bluish green */
-  --biz-skincare: oklch(0.621 0.17 47.51); /* #d55e00  Okabe-Ito vermillion */
+  --biz-laundry: oklch(0.532 0.131 244.05); /* #0172b2 - Okabe-Ito blue #0072b2 */
+  --biz-spa: oklch(0.62 0.128 165.46); /* #099e73 - Okabe-Ito bluish green #009e73 */
+  --biz-skincare: oklch(0.621 0.17 47.51); /* #d55e01 - Okabe-Ito vermillion #d55e00 */
 
   /* Anything the app cannot attribute to a business. No hue, because it is an absence.
    *
