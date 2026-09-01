@@ -1,0 +1,17 @@
+# Line endings, settled once. Card 0036.
+#
+# Without this file, `core.autocrlf` decides - and on the development machine it is `true`, so a
+# checkout writes CRLF while the repository stores LF. Prettier's `endOfLine` default is `lf`, so
+# `pnpm format:check` fails locally on files that are perfectly formatted in the repository, while CI
+# checks out LF and passes.
+#
+# That is worse than a cosmetic annoyance. It cost real attention twice: two separate review passes
+# reported the failing Format step as a finding, one of them predicting it would block the deploy. A
+# gate that cries wolf on a developer machine teaches people to ignore it, which is the opposite of
+# what a gate is for.
+#
+# `text=auto` lets git detect which files are text; `eol=lf` then pins what a checkout writes,
+# regardless of anybody's `core.autocrlf`. Binary files are unaffected because they are not detected
+# as text - and this repository has no `.cmd`, `.bat` or `.ps1` files, which are the ones that would
+# genuinely want CRLF and would need an exception here.
+* text=auto eol=lf
