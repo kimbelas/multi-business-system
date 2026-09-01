@@ -133,10 +133,12 @@ export interface Fixture {
    * role. This is the other axis, and without a second org there is nothing to test it against:
    * a policy that confused "my org" with "any org" would pass every single-tenant assertion.
    *
-   * `owner_id` on this org is deliberately set to the owner persona while granting them no
-   * membership in it, because `organizations.owner_id` and `memberships.role = 'owner'` are two
-   * different claims about ownership and only the second one is wired to RLS. Setting it this way
-   * makes that a tested property rather than an unexamined one.
+   * Nobody holds a grant in it. That is the whole design: an organisation a persona can reach only
+   * by a policy being wrong.
+   *
+   * This org used to name the owner persona in `organizations.owner_id` while granting them no
+   * membership, so the suite could assert that the column was not a grant. The column is gone -
+   * card 0033 - because two spellings of ownership is a trap rather than a property worth testing.
    */
   otherOrgId: string;
   otherBranchId: string;
@@ -225,7 +227,7 @@ export async function setUpFixture(env: RlsEnv): Promise<Fixture> {
     // rather than as a failed assertion.
     const org = await admin
       .from("organizations")
-      .insert({ name: `rls-test ${runId}`, owner_id: personas.owner.userId })
+      .insert({ name: `rls-test ${runId}` })
       .select("id")
       .single();
     if (org.error) throw new Error(`org: ${org.error.message}`);
@@ -273,12 +275,11 @@ export async function setUpFixture(env: RlsEnv): Promise<Fixture> {
 
     // ---------------------------------------------------------------- a second tenancy
     //
-    // One business, one branch, and no membership for anybody. `owner_id` names the owner
-    // persona on purpose: it is the claim RLS does *not* read, so an org they are named on and
-    // hold no grant in is the cleanest way to assert that the two are separate.
+    // One business, one branch, and no membership for anybody - so every assertion about reaching
+    // across tenancies has something on the other side of the boundary to fail against.
     const otherOrg = await admin
       .from("organizations")
-      .insert({ name: `rls-other ${runId}`, owner_id: personas.owner.userId })
+      .insert({ name: `rls-other ${runId}` })
       .select("id")
       .single();
     if (otherOrg.error) throw new Error(`other org: ${otherOrg.error.message}`);

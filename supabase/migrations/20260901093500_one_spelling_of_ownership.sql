@@ -1,0 +1,33 @@
+-- One spelling of ownership. Card 0033.
+--
+-- Ownership was written twice: `organizations.owner_id`, a not-null column with a foreign key to
+-- `profiles`, and `memberships.role = 'owner'`, the grant every policy actually consults. Nothing
+-- read the column. `grep owner_id` across the migrations found exactly one line - its own
+-- definition - and across `src/` found nothing at all.
+--
+-- Two sources of truth for the same fact is a trap with a predictable shape: the next policy that
+-- needs "who owns this" reaches for the column, because it is on the row and needs no join, and
+-- hands over a whole tenancy on the strength of a value nothing maintains. A persona test pinned
+-- the column as decorative, which documented the trap without disarming it.
+--
+-- So it goes, rather than becoming authoritative. Three reasons, and the first is decisive:
+--
+--   1. Ownership is PLURAL. A single uuid cannot say that two people own an organisation, and
+--      being able to grant owner is a requirement in its own right (card 0034). Promoting this
+--      column would mean rebuilding the model around a shape that cannot express the requirement.
+--   2. Every policy already goes through `owned_org_ids()`, which reads memberships. Making the
+--      column authoritative would mean re-deriving every one of them, and the acceptance criterion
+--      for that is "an owner reaches exactly what they did before" - a re-proof of work already
+--      proved, bought with nothing.
+--   3. `not null references profiles (id)` means an organisation cannot exist before its owner's
+--      profile does, and an owner's account cannot be deleted until the organisation is. The first
+--      is an ordering constraint on a bootstrap nobody has written yet; the second cost a review
+--      finding on the e2e teardown, where a failed organisation delete left the owner's auth user
+--      behind while four other personas went.
+--
+-- What is lost: nothing that was being used. If "who created this organisation" is ever wanted, it
+-- is `created_by`, a different question from who owns it now, and it would be nullable, indexed for
+-- nothing, and read by no policy.
+
+alter table public.organizations
+  drop column owner_id;

@@ -364,18 +364,25 @@ describeRls("row level security", () => {
       expect(branches.data).toEqual([]);
     });
 
-    it("does not treat organizations.owner_id as a grant", async () => {
+    it("has no second spelling of ownership to reach for", async () => {
       /*
-       * The fixture names the owner persona as `owner_id` on the second org and gives them no
-       * membership in it. Authorization reads `memberships.role = 'owner'` and never that column,
-       * so the two are separate claims - and a future policy reaching for the convenient one
-       * would hand over a whole tenancy. This is the test that notices.
+       * `organizations.owner_id` is gone - card 0033. It was read by no policy and maintained by
+       * nothing, and the test that used to live here pinned it as decorative: the fixture named the
+       * owner persona on an org they held no grant in, and asserted the org stayed invisible.
+       *
+       * That documented the trap without disarming it. The replacement asserts the column does not
+       * exist, which is the only version of this claim that cannot rot: a policy cannot reach for
+       * what is not there, and if somebody re-adds the column this fails and asks why.
+       *
+       * PostgREST answers an unknown column with 42703 rather than an empty result, so this is a
+       * real assertion and not an absence that could also mean "no rows".
        */
-      const { data } = await f.personas.owner.db
-        .from("organizations")
-        .select("id")
-        .eq("id", f.otherOrgId);
-      expect(data).toEqual([]);
+      const { error } = await f.admin.from("organizations").select("owner_id").limit(1);
+      expect(
+        error,
+        "organizations.owner_id is back; ownership has two spellings again",
+      ).not.toBeNull();
+      expect(error?.code ?? error?.message).toBe("42703");
     });
 
     it("reports no role at a branch in another org", async () => {
