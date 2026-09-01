@@ -78,11 +78,16 @@ setup("create personas and sign each of them in", async ({ browser }) => {
     const page = await context.newPage();
     await signInThroughForm(page, email, password);
 
-    // The session is real only if the middleware let us past it, so assert that rather than the
-    // presence of a cookie - `getUser()` verifying the token is the whole point of that gate.
-    await expect(page).not.toHaveURL(/\/login/);
-
-    await context.storageState({ path: authPaths.STATE(name) });
+    /*
+     * `signInThroughForm` already waited for the URL to leave /login, so re-asserting it here
+     * proves nothing - it was a check that could not fail. What actually needs asserting is the
+     * artefact every spec depends on: `storageState` writes a file whether or not it contains a
+     * session, and `authed.ts` deliberately falls back to no session when that file is missing. An
+     * empty one would sail past both and produce nine confusing failures.
+     */
+    const state = await context.storageState({ path: authPaths.STATE(name) });
+    const cookies = state.cookies.filter((cookie) => cookie.name.startsWith("sb-"));
+    expect(cookies, `${name} signed in but no Supabase cookie was stored`).not.toHaveLength(0);
     await context.close();
   }
 });

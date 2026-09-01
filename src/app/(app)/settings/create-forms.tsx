@@ -33,16 +33,30 @@ const submit =
  * `branches_business_org_fk`. At 390px that pushes the row past the card, which is the same
  * sideways scroll the roster row already had once on this screen.
  */
+/*
+ * The live region exists whether or not there is a result.
+ *
+ * A `role="status"` node that is inserted together with its text is the case assistive technology
+ * handles worst: a polite region has to be in the accessibility tree BEFORE its content changes for
+ * the change to be announced reliably. Returning null until there is something to say meant a blind
+ * owner got no announcement of "Somebody already has an account with that email" - the message the
+ * whole `submitted` echo-back in `actions.ts` exists to preserve.
+ *
+ * So the wrapper is always rendered and only the text swaps. Empty it collapses to nothing visible.
+ */
 function Result({ result }: { result: ActionResult | null }) {
-  if (!result) return null;
   return (
     <p
       role="status"
-      className={`text-[13px] wrap-anywhere ${
-        result.ok ? "text-muted-foreground" : "text-destructive-strong"
-      }`}
+      className={
+        result
+          ? `text-[13px] wrap-anywhere ${
+              result.ok ? "text-muted-foreground" : "text-destructive-strong"
+            }`
+          : undefined
+      }
     >
-      {result.message}
+      {result?.message ?? ""}
     </p>
   );
 }
@@ -65,9 +79,9 @@ export function CreateBusinessForm() {
       aria-labelledby={titleId}
       className="flex flex-col gap-3 rounded-xl bg-card p-4 shadow-card"
     >
-      <p id={titleId} className="text-sm font-medium">
+      <h3 id={titleId} className="text-sm font-medium">
         Add a business
-      </p>
+      </h3>
       <div className="flex flex-col gap-1.5">
         <label htmlFor={nameId} className={labelClass}>
           Name
@@ -130,9 +144,9 @@ export function CreateBranchForm({
       aria-labelledby={titleId}
       className="flex flex-col gap-3 rounded-xl bg-card p-4 shadow-card"
     >
-      <p id={titleId} className="text-sm font-medium">
+      <h3 id={titleId} className="text-sm font-medium">
         Add a branch
-      </p>
+      </h3>
       <div className="flex flex-col gap-1.5">
         <label htmlFor={businessId} className={labelClass}>
           Business

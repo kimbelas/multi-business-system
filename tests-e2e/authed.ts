@@ -64,6 +64,10 @@ export function writeManifest(manifest: FixtureManifest) {
  * database is worse than no suite. The difference here is that a missing manifest also means the
  * setup project did not run, which is worth distinguishing from "no credentials".
  */
+export function stateExists(persona: PersonaName): boolean {
+  return existsSync(STATE(persona));
+}
+
 export function readManifest(): FixtureManifest | null {
   if (!existsSync(MANIFEST)) return null;
   return JSON.parse(readFileSync(MANIFEST, "utf8")) as FixtureManifest;

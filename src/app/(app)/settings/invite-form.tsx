@@ -18,6 +18,15 @@ import { type ActionResult, inviteStaff } from "./actions";
  * including money". A permission name is only meaningful to whoever wrote the matrix; the person
  * hiring a counter assistant needs the sentence.
  */
+/**
+ * The id of the visible "Add someone" heading, which names this form.
+ *
+ * Exported rather than duplicated: an `aria-label` here would be a second copy of a string a user
+ * can read, free to drift from it - and it did, briefly, as "Invite somebody". The accessible name
+ * should be the words on the screen.
+ */
+export const INVITE_HEADING_ID = "settings-invite-heading";
+
 export function InviteForm({ branches }: { branches: readonly { id: string; label: string }[] }) {
   const [result, submit, pending] = useActionState<ActionResult | null, FormData>(
     inviteStaff,
@@ -40,7 +49,7 @@ export function InviteForm({ branches }: { branches: readonly { id: string; labe
   return (
     <form
       action={submit}
-      aria-label="Invite somebody"
+      aria-labelledby={INVITE_HEADING_ID}
       className="mt-3 flex flex-col gap-3 rounded-xl bg-card p-4 shadow-card"
     >
       <div className="flex flex-col gap-1.5">
@@ -144,35 +153,51 @@ export function InviteForm({ branches }: { branches: readonly { id: string; labe
         {pending ? "Creating the account…" : "Create account and grant access"}
       </button>
 
-      {result && (
-        <div
-          role="status"
-          className={`rounded-[10px] p-3 text-[13.5px] ${
-            result.ok
-              ? "bg-muted text-foreground"
-              : "bg-destructive-surface text-destructive-strong"
-          }`}
-        >
-          <p>{result.message}</p>
-          {result.tempPassword && (
-            <div className="mt-2.5">
-              {/*
-               * Shown once and never again. The invite has no mailer behind it, so this string is
-               * the only way the person gets in - and if this screen is closed before it is read,
-               * the account is stranded until somebody issues a new password from the roster. The
-               * copy says so plainly rather than letting the owner discover it later.
-               */}
-              <p className="text-xs text-muted-foreground">
-                Their password. Write it down now &mdash; it is not shown again and no email is
-                sent.
-              </p>
-              <p className="mt-1 font-mono text-[15px] break-all select-all">
-                {result.tempPassword}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
+      {/*
+       * Always in the tree, so a result is an update to an existing live region rather than a new
+       * one arriving with its text already in place - the insertion assistive tech announces least
+       * reliably.
+       *
+       * Empty, it drops its own styling rather than being `hidden`: `display: none` would take it
+       * back OUT of the accessibility tree, which is the exact problem this is fixing. With no
+       * classes and no children a block element has no line box and no height, so it costs nothing
+       * on screen while staying present to be updated.
+       */}
+      <div
+        role="status"
+        className={
+          result
+            ? `rounded-[10px] p-3 text-[13.5px] ${
+                result.ok
+                  ? "bg-muted text-foreground"
+                  : "bg-destructive-surface text-destructive-strong"
+              }`
+            : undefined
+        }
+      >
+        {result && (
+          <>
+            <p>{result.message}</p>
+            {result.tempPassword && (
+              <div className="mt-2.5">
+                {/*
+                 * Shown once and never again. The invite has no mailer behind it, so this string is
+                 * the only way the person gets in - and if this screen is closed before it is read,
+                 * the account is stranded until somebody issues a new password from the roster. The
+                 * copy says so plainly rather than letting the owner discover it later.
+                 */}
+                <p className="text-xs text-muted-foreground">
+                  Their password. Write it down now &mdash; it is not shown again and no email is
+                  sent.
+                </p>
+                <p className="mt-1 font-mono text-[15px] break-all select-all">
+                  {result.tempPassword}
+                </p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </form>
   );
 }

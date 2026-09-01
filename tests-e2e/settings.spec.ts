@@ -1,6 +1,6 @@
 import { rlsFullyConfigured } from "../tests-rls/harness";
 
-import { expect, readManifest, test } from "./authed";
+import { expect, readManifest, stateExists, test } from "./authed";
 
 /**
  * The staff admin, in a browser, for the first time.
@@ -30,27 +30,46 @@ import { expect, readManifest, test } from "./authed";
  * A hook is evaluated per test, after the dependency has finished, which is the only time the
  * question has an answer.
  */
-test.beforeEach(() => {
-  if (readManifest() !== null) return;
-
+test.beforeEach(({ persona }) => {
   /*
-   * A missing manifest means the setup project skipped, and it skips for exactly one reason: it had
-   * no credentials to create personas with. So if the credentials ARE here, the absence is a
-   * failure and must not go green - that is the whole lesson of the run described above.
+   * The credentials decide first, and nothing else does.
    *
    * Keyed on all three variables being present rather than on `rlsEnv`, which throws on a partial
    * set - and the e2e job's placeholders make that set partial on a fork by design.
+   *
+   * Asking the credentials BEFORE the manifest also settles a case the previous order got wrong.
+   * `tests-e2e/.auth` survives any run where the credentials are absent, because both the setup and
+   * the teardown skip before touching it - so on a machine that once had them, a stale manifest
+   * would satisfy the guard and these ten tests would run against accounts that no longer exist.
+   * Nine would fail confusingly and one would pass, which is this commit's own defect inverted.
    */
-  if (rlsFullyConfigured()) {
-    throw new Error(
-      "The Supabase credentials are configured, so the auth setup project should have written " +
-        `${"tests-e2e/.auth/fixture.json"}. It is absent, which means the setup did not run or ` +
-        "did not finish. These tests must not skip to green where they are supposed to run.",
-    );
+  if (!rlsFullyConfigured()) {
+    test.skip(true, "needs the personas the auth setup project creates");
+    return;
   }
 
-  // A fork with no secrets, or this machine. Skipped, not failed.
-  test.skip(true, "needs the personas the auth setup project creates");
+  /*
+   * From here the setup project must have produced both artefacts, so their absence is a failure
+   * and must not go green - the whole lesson of the run described above.
+   *
+   * Both, not just the manifest. They are written at different times: the manifest before any
+   * sign-in, each `<persona>.json` after that persona's. So a present manifest is not evidence
+   * that THIS test's browser has a session, and `authed.ts` falls back to no session rather than
+   * throwing when the state file is missing.
+   */
+  if (readManifest() === null) {
+    throw new Error(
+      "The Supabase credentials are configured, so the auth setup project should have written " +
+        "tests-e2e/.auth/fixture.json. It is absent, which means the setup did not run or did " +
+        "not finish. These tests must not skip to green where they are supposed to run.",
+    );
+  }
+  if (!stateExists(persona)) {
+    throw new Error(
+      `The fixture exists but tests-e2e/.auth/${persona}.json does not, so this test would run ` +
+        "with no session and assert against the login page instead.",
+    );
+  }
 });
 
 test.describe("the owner", () => {
@@ -65,6 +84,11 @@ test.describe("the owner", () => {
     await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
     await expect(page.getByText(/Nobody yet/)).toHaveCount(0);
     await expect(page.getByText(/Couldn't load people/)).toHaveCount(0);
+
+    // Positively, not just by the absence of the two empty states: somebody is actually listed.
+    await expect(
+      page.getByRole("listitem").filter({ hasText: "Whole organisation" }).first(),
+    ).toBeVisible();
   });
 
   test("does not scroll sideways at 390px", async ({ page }) => {
@@ -104,9 +128,11 @@ test.describe("the owner", () => {
      * invite, "Add a business" and "Add a branch" all ask for a name. That is what the first real
      * run of this test found, and the fix belongs partly in the app - a page carrying three unnamed
      * forms is as ambiguous to a screen reader as it was to the locator, so each one now has an
-     * accessible name and this addresses the one it means.
+     * accessible name and this addresses the one it means - by the words on the screen, which
+     * is why the invite form points at its own visible heading rather than carrying a label
+     * only a screen reader ever hears.
      */
-    const form = page.getByRole("form", { name: "Invite somebody" });
+    const form = page.getByRole("form", { name: "Add someone" });
 
     const taken = manifest.personas.owner.email;
     await form.getByLabel(/Email they will sign in with/i).fill(taken);
@@ -115,7 +141,7 @@ test.describe("the owner", () => {
     await form.getByLabel(/^Branch$/i).selectOption({ index: 1 });
     await form.getByRole("button", { name: /Create account and grant access/i }).click();
 
-    await expect(page.getByRole("status")).toContainText(/already has an account/i);
+    await expect(form.getByRole("status")).toContainText(/already has an account/i);
     await expect(form.getByLabel(/Email they will sign in with/i)).toHaveValue(taken);
     await expect(form.getByLabel(/^Name/i)).toHaveValue("Ana Reyes");
     await expect(form.getByRole("radio", { name: /Manager/ })).toBeChecked();
@@ -293,7 +319,15 @@ test.describe("a staff member", () => {
   });
 
   test("sees no Settings destination in the navigation", async ({ page }) => {
+    /*
+     * Anchored on a destination that SHOULD be there, because a purely negative assertion passes
+     * for all the wrong reasons: with no session the middleware redirects to /login, which has no
+     * Settings link either - and it would also pass on a 500, on an empty body, and the day the
+     * link gets renamed. "Today" is in the rail for every role, so seeing it proves this is the
+     * signed-in shell before the absence of Settings is allowed to mean anything.
+     */
     await page.goto("/");
+    await expect(page.getByRole("link", { name: "Today" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Settings" })).toHaveCount(0);
   });
 });

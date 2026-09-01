@@ -4,7 +4,7 @@ import { requireCapability } from "@/lib/authz";
 import { businessLabel } from "@/lib/business";
 import { loadRoster } from "@/lib/roster";
 import { CreateBranchForm, CreateBusinessForm } from "./create-forms";
-import { InviteForm } from "./invite-form";
+import { INVITE_HEADING_ID, InviteForm } from "./invite-form";
 import { MemberActions } from "./member-actions";
 
 /**
@@ -209,7 +209,9 @@ export default async function SettingsPage() {
       </section>
 
       <section className="mt-8">
-        <h2 className="px-1 text-sm font-medium">Add someone</h2>
+        <h2 id={INVITE_HEADING_ID} className="px-1 text-sm font-medium">
+          Add someone
+        </h2>
         {branchOptions.length === 0 ? (
           <p className="mt-3 rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
             Add a branch first &mdash; a grant names the branch it applies to.

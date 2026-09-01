@@ -74,16 +74,22 @@ export function MemberActions({
         </button>
       </div>
 
-      {pwResult && (
-        <p role="status" className="mt-1.5 w-full text-xs text-muted-foreground">
-          {pwResult.message}
-          {pwResult.tempPassword && (
-            <span className="mt-1 block font-mono text-[13.5px] break-all select-all text-foreground">
-              {pwResult.tempPassword}
-            </span>
-          )}
-        </p>
-      )}
+      {/*
+       * Rendered whether or not there is a result. A polite live region has to exist before its
+       * content changes to be announced reliably, and this one carries a temporary password - the
+       * single most important thing on this screen to not silently miss.
+       */}
+      <p
+        role="status"
+        className={pwResult ? "mt-1.5 w-full text-xs text-muted-foreground" : undefined}
+      >
+        {pwResult?.message}
+        {pwResult?.tempPassword && (
+          <span className="mt-1 block font-mono text-[13.5px] break-all select-all text-foreground">
+            {pwResult.tempPassword}
+          </span>
+        )}
+      </p>
 
       <dialog
         ref={dialog}
