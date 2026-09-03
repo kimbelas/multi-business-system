@@ -277,6 +277,57 @@ describeRls("row level security", () => {
     });
   });
 
+  // ---------------------------------------------------------------- the selected branch
+
+  /*
+   * Card 0004's second criterion, the half that says "asserted by a persona test, not by the UI".
+   *
+   * The app keeps a selected branch in a cookie so the server can read it without a round trip, and
+   * that cookie is the only input to scope a person can edit. The claim being tested is that it is a
+   * preference and never a permission - so the assertions below are deliberately about the
+   * *database*, which has never heard of it: no policy, helper or column takes a selection, and
+   * reach is a function of grants alone.
+   *
+   * Branch B rather than the other organisation's branch, which the case above already covers.
+   * Branch B is in the same organisation under the same business, so a policy that filtered by
+   * tenancy instead of by grant would pass every cross-org assertion in this file and leak here.
+   */
+  describe("the selected branch, which the database has never heard of", () => {
+    it("cannot become a role by being named", async () => {
+      // If the cookie were ever believed, this is the call every screen derives its controls from.
+      const { data } = await f.personas.staffA.db.rpc("role_for_branch", {
+        target_branch: f.branchB,
+      });
+      expect(data, "naming a branch must not confer a role there").toBeNull();
+    });
+
+    it("is absent from the reach each persona actually has", async () => {
+      // Reach is the grant and nothing else. Asserted as a set, because a helper that returned the
+      // right branch plus one more would satisfy any `toContain`.
+      const staff = await f.personas.staffA.db.rpc("accessible_branch_ids");
+      expect(staff.data ?? []).toEqual([f.branchA]);
+
+      const owner = await f.personas.owner.db.rpc("accessible_branch_ids");
+      expect([...(owner.data ?? [])].sort()).toEqual([f.branchA, f.branchB].sort());
+    });
+
+    it("refuses the read the switcher's action makes before it writes anything", async () => {
+      /*
+       * `canReachBranch` in `lib/scope.ts`, in the shape it runs: a point read by id. The server
+       * action calls it because a server action is a public endpoint and anyone can post any branch
+       * id to it, and this is the assertion that the refusal comes from the database rather than
+       * from the action being polite. A policy that filtered lists but not point reads would leave
+       * that guard passing on a branch it should not.
+       */
+      const { data } = await f.personas.staffA.db
+        .from("branches")
+        .select("id")
+        .eq("id", f.branchB)
+        .maybeSingle();
+      expect(data).toBeNull();
+    });
+  });
+
   // ---------------------------------------------------------------- cross-tenant isolation
 
   /*

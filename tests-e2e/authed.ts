@@ -42,6 +42,16 @@ export interface FixtureManifest {
   orgName: string;
   branchA: string;
   branchB: string;
+  /**
+   * The branch names, so a spec can assert a screen says which branch it is on.
+   *
+   * Same rule as `orgName`: compared against what was inserted rather than rebuilt from `runId`,
+   * because two wrong copies of a name agree with each other perfectly.
+   */
+  branchAName: string;
+  branchBName: string;
+  /** The laundry business, which is the one both branches belong to. */
+  laundryName: string;
   otherOrgId: string;
   otherBranchId: string;
   businessIds: string[];

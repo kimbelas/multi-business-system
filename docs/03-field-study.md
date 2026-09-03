@@ -138,6 +138,22 @@ row has a decision and a name against it.
 | Itemised sale (items and prices)          | Spa, skin care | _pending_                       | Asked whether a `line_items` table or a `services` catalogue is the more maintainable shape; recommendation is the catalogue plus an optional `service_id`, awaiting the owner. | —                 |
 |                                           |                |                                 |                                                                                                                                                                                 |                   |
 
+### The float's shape, answered 2026-09-03
+
+§5 records the float as **must add** and left its shape open. Card 0044 said the shape had to be
+decided before the migration rather than after, because "can it change mid-day" is the difference
+between a column and a table.
+
+**It cannot change mid-day.** The float is a standing amount per branch, so:
+
+`branches.opening_float numeric(12,2) not null default 0`, set from Settings by an owner only, and
+`expected_cash = opening_float + cash sales - cash refunds - cash expenses` computed in one place
+that both the close screen and any report read from. A default of 0 means a branch with no float
+produces exactly the numbers the spec's formula produces today.
+
+Card 0026 writes this into the core migration; card 0007 takes the float as an argument to the
+expected-cash function rather than adding it to that function's result afterwards.
+
 ### Answered by the owner without a visit, 2026-09-01
 
 Three of §4's eleven gaps are settled above, from the owner's own knowledge of the businesses rather

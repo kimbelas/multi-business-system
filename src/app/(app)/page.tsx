@@ -2,6 +2,7 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { SelectedBranch } from "@/components/shell/selected-branch";
 import { AppearanceRow } from "@/components/ui/appearance-row";
 import { Chip, RoleChip } from "@/components/ui/chip";
 import { Swatch } from "@/components/ui/swatch";
@@ -55,6 +56,25 @@ export default async function HomePage() {
           <RoleChip role={scope.role} />
         </p>
       </header>
+
+      {/*
+       * Before the list, because it answers a different question from it.
+       *
+       * The list says which branches exist and which of them is current; this says what the app is
+       * pointed at right now, which is the fact a sale gets attributed to. Card 0004's criterion
+       * asks for it on the view an owner lands on, and the reason it is here rather than left to
+       * the shell is the breakpoint: the top bar naming the branch is `hidden sm:flex`.
+       */}
+      {scope.activeBranch && scope.activeBusiness && (
+        <SelectedBranch
+          className="mt-6"
+          businessName={scope.activeBusiness.name}
+          businessType={scope.activeBusiness.type}
+          branchName={scope.activeBranch.name}
+          role={scope.activeBranch.role}
+          canSwitch={branchCount > 1}
+        />
+      )}
 
       {scope.businesses.length === 0 && (
         /*
@@ -141,21 +161,11 @@ export default async function HomePage() {
         ))}
       </div>
 
-      {branchCount > 1 && (
-        <Link
-          href="/switch"
-          className="mt-4 flex min-h-pill items-center justify-between gap-3 rounded-xl bg-card px-4 py-2.5 shadow-card transition-shadow hover:shadow-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        >
-          <span>
-            <span className="block text-sm font-medium">Switch branch</span>
-            {/* Was "sets which branch the app is scoped to". Scope is a word from the code. */}
-            <span className="mt-0.5 block text-xs text-muted-foreground">
-              Choose which branch the app opens on.
-            </span>
-          </span>
-          <ChevronRight aria-hidden className="size-4 flex-none text-muted-foreground" />
-        </Link>
-      )}
+      {/*
+       * The foot used to carry a "Switch branch" row. It is gone rather than kept alongside the
+       * selected-branch statement above: two rows going to the same place, one naming the branch
+       * and one not, is the shape that makes somebody read the wrong one.
+       */}
 
       <AppearanceRow className="mt-10" />
     </main>

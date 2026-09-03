@@ -3,7 +3,8 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { ACTIVE_BRANCH_COOKIE, canReachBranch } from "@/lib/scope";
+import { ACTIVE_BRANCH_COOKIE } from "@/lib/cookies";
+import { canReachBranch } from "@/lib/scope";
 
 /**
  * Set the active branch.

@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 
 import { createClient } from "@/lib/supabase/server";
 import { type BusinessType } from "@/lib/business";
+import { ACTIVE_BRANCH_COOKIE } from "@/lib/cookies";
 import { activeOrgIdFor, activeRoleFor, highest, type Role } from "@/lib/rbac";
 
 /**
@@ -19,8 +20,6 @@ import { activeOrgIdFor, activeRoleFor, highest, type Role } from "@/lib/rbac";
  * branches RLS just returned, and a branch that is not in that list is discarded silently. Someone
  * editing the cookie to another branch's id gets their own scope back, not that branch.
  */
-
-export const ACTIVE_BRANCH_COOKIE = "bizdesk_branch";
 
 export interface BranchScope {
   readonly id: string;
@@ -198,9 +197,25 @@ export async function loadScope(): Promise<Scope | null> {
      *
      * `id` is unique, so this is a total order and the fallback is now deterministic for real rather
      * than deterministic given a tie-break nobody specified.
+     *
+     * ## And the same defect one level further down, found while writing card 0004's reload test
+     *
+     * The BRANCHES were an embedded resource with no ordering at all, so their order was whatever
+     * PostgREST returned. The fallback is "the first branch of the first business", which made the
+     * branch an owner lands on - before they have ever switched, which is every owner on their
+     * first visit - unspecified rather than merely tie-broken. Two loads could disagree, and the
+     * criterion being tested here is that the selection survives a refresh.
+     *
+     * It also decided the order of the branch list on this page and on the switcher, so a list that
+     * reshuffles between visits was the visible half of the same cause.
+     *
+     * `referencedTable` orders the embed and, per postgrest-js, does not affect the parent's own
+     * ordering - so all four clauses are needed and none of them replaces another.
      */
     .order("name")
-    .order("id");
+    .order("id")
+    .order("name", { referencedTable: "branches" })
+    .order("id", { referencedTable: "branches" });
 
   // One rule, one implementation. This was a separate closure that happened to agree with
   // `activeRoleFor`; two copies of a permission rule is one copy too many.

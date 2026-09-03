@@ -131,9 +131,20 @@ export interface Fixture {
   orgName: string;
   /** Business ids by type, for the three types the enum declares. */
   businesses: Record<string, string>;
+  /**
+   * The same businesses' names, keyed the same way.
+   *
+   * Carried rather than rebuilt from `runId`, which is the rule `orgName` above already states: a
+   * spec asserting that a screen names the business it is showing must compare against the string
+   * that was inserted, or a rename leaves two wrong copies agreeing with each other.
+   */
+  businessNames: Record<string, string>;
   /** Two branches under the laundry business: A and B. */
   branchA: string;
   branchB: string;
+  /** Their names, for the same reason `businessNames` exists. A sorts before B. */
+  branchAName: string;
+  branchBName: string;
   /**
    * A second organisation nobody in `personas` holds a membership in.
    *
@@ -302,14 +313,16 @@ export async function setUpFixture(env: RlsEnv): Promise<Fixture> {
     createdOrgs.push(orgId);
 
     const businesses: Record<string, string> = {};
+    const businessNames: Record<string, string> = {};
     for (const type of ["laundry", "spa", "skincare"]) {
       const row = await admin
         .from("businesses")
         .insert({ org_id: orgId, type, name: `rls ${type} ${runId}` })
-        .select("id")
+        .select("id, name")
         .single();
       if (row.error) throw new Error(`business ${type}: ${row.error.message}`);
       businesses[type] = row.data.id;
+      businessNames[type] = row.data.name;
       createdBusinesses.push(row.data.id);
     }
 
@@ -374,8 +387,11 @@ export async function setUpFixture(env: RlsEnv): Promise<Fixture> {
       orgId,
       orgName,
       businesses,
+      businessNames,
       branchA: a.id,
       branchB: b.id,
+      branchAName: a.name,
+      branchBName: b.name,
       otherOrgId,
       otherBranchId: otherBranch.data.id,
       personas,
