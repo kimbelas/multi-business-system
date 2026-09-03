@@ -19,7 +19,8 @@
     "cf:deploy": "opennextjs-cloudflare deploy",
     "test:rls": "vitest run --config vitest.rls.config.ts",
     "test:e2e:deployed": "playwright test deployed.spec.ts",
-    "palette": "node --experimental-strip-types scripts/palette-check.mjs"
+    "palette": "node --experimental-strip-types scripts/palette-check.mjs",
+    "bundle:budget": "node --experimental-strip-types scripts/bundle-budget.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -94,7 +94,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321' }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'ci-placeholder-anon-key' }}
 
-      - name: Fail if the Worker exceeds the free-plan budget
+      - name: Fail if the Worker exceeds its budget
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
@@ -102,24 +102,15 @@ jobs:
           # every module in the Worker, gzipped. NOT the size of .open-next/worker.js,
           # which is a 2 KB entry point importing a 25 MB server bundle - measuring that
           # reported 746 bytes against a 3 MiB limit and would never have fired.
+          #
+          # The thresholds and the parse live in tests/support/bundle-budget.ts, asserted by
+          # tests/bundle-budget.test.ts. This step used to do the arithmetic inline in awk, and
+          # that version could not fail: an unreadable size became an empty string, awk coerced
+          # it to 0, and the run printed "Worker:  KiB gzipped of 3072 KiB (0.0% used)" and went
+          # green. The `grep -i "Total Upload"` in front of it proved the line existed, never
+          # that a number came out of it.
           out=$(pnpm exec wrangler deploy --dry-run 2>&1) || { echo "$out"; exit 1; }
-          echo "$out" | grep -i "Total Upload" || { echo "$out"; exit 1; }
-
-          gz=$(echo "$out" | grep -i "Total Upload" | awk -F"gzip:" "{print \$2}" | tr -dc "0-9.")
-          limit=3072
-
-          # awk, because the reported size has decimals and the shell compares integers.
-          awk -v g="$gz" -v l="$limit" 'BEGIN {
-            pct = g * 100 / l
-            printf "Worker: %s KiB gzipped of %s KiB (%.1f%% used)\n", g, l, pct
-            if (g > l) {
-              print "::error::Worker is over the 3 MiB compressed limit"
-              exit 1
-            }
-            if (pct > 75) {
-              print "::warning::Over 75%% of the Worker budget is used"
-            }
-          }'
+          echo "$out" | pnpm bundle:budget
 
   deployed:
     # The deployed build as the testing ground: the guards that only mean anything once the app
