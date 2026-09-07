@@ -540,12 +540,124 @@ General mechanisms: **[DOCS]** Toast force-closes stale open checks at a configu
 
 ---
 
-## 5. Packages and customer tabs
+## 5. Prepaid packages, and the day the takings look wrong
 
-Researched separately; this section is written when that lands.
+The gap the field study found that was not on the board at all: a clinic sells "5 sessions for
+₱18,000", the client pays once and consumes it over months, and nothing tracks the balance.
 
-One answer is already visible from §4.2, though: **a running tab needs no new table.** Odoo's
-`pay_later` payment method — non-cash, pointed at a receivable account — is invisible to the drawer
-count automatically, because the close filters on `is_cash_count` rather than special-casing anything.
-Toast's house account is the same idea. If shadowing turns up utang at any branch, that is the cheapest
-correct shape.
+### 5.1 The accounting question decides the schema, not the other way round
+
+**[DOCS] ASC 606-10-55-46, verbatim** (IFRS 15.B44 is word-identical): "upon receipt of a prepayment
+from a customer, an entity should recognize a **contract liability** in the amount of the prepayment
+for its performance obligation to transfer, or to stand ready to transfer, goods or services in the
+future. An entity should **derecognize that contract liability (and recognize revenue) when it
+transfers those goods or services**."
+
+**[DOCS] A fixed-session package is recognised _per session_, not spread over time.** KPMG's revenue
+handbook, citing TRG 01-15.16, uses this exact fact pattern: "a contract that obligates the entity to
+provide a customer access to its health club **ten times** would diminish each time the customer uses
+the health club." Only an _unlimited_ membership is a stand-ready obligation recognised ratably.
+
+**And the vendors encode precisely that split.** Mindbody's Outstanding Series report computes
+unearned value as **visits remaining** for a limited pricing option and **days remaining** for an
+unlimited one — the software's two formulas are the standard's two promise types. Zenoti shows package
+revenue on the redemption date in one report and the sale date in another, on the same screen. Timely
+defers to redemption outright.
+
+_(Verification: the ASC 606 and KPMG citations are from PDFs and quotable as they stand. The Mindbody
+and Zenoti help pages are Salesforce SPAs that returned shells to a fetch — those two are second-hand.
+The Boulevard page in §5.3 was verified firsthand.)_
+
+### 5.2 The shape: two enum values and one nullable FK
+
+This is the finding that makes the feature cheap. A redemption does not need a parallel reporting
+path — it needs to be a transaction with a payment method that is not money:
+
+```sql
+alter type transaction_kind add value 'prepayment';   -- money in, not revenue
+alter type payment_method  add value 'package';       -- revenue, no money
+alter table package_redemptions add column transaction_id uuid unique references transactions(id);
+```
+
+- **Package sale** — `kind='prepayment'`, `amount=18000`, `payment_method='cash'`. In the drawer, out
+  of revenue.
+- **Redemption** — `kind='sale'`, `amount=3600`, `payment_method='package'`. Revenue, no cash. This is
+  Zenoti's `Sale type = Redemption`, and Shopify's gift-card treatment: the full value of the item is
+  claimed as sales, with the prepaid instrument as the tender.
+
+**Expected cash needs no special case.** It already filters `payment_method = 'cash'`, so `'package'`
+is excluded structurally — the same trick as Odoo's `is_cash_count` filter in §4.2, and the same one
+that makes a running tab free.
+
+**`revenue today = Σ(kind='sale')` is then honest every day**, with no deferral engine, no scheduler
+and no GL. **[DOCS] None of the salon systems posts a journal entry either** — they report the
+roll-forward and hand it to the bookkeeper. That stays the right scope here.
+
+Outstanding liability is `Σ prepayments − Σ redemptions − Σ expired`, and it clears, because expiry has
+somewhere to go. Rounding: the last redemption takes `amount_paid − Σ prior redemptions`, so five
+₱833.33 sessions still total ₱2,500.
+
+Supporting tables, from the same survey: a `client_packages` / `package_redemptions` pair with the
+**balance derived rather than stored**, a `seq` column plus a partial unique index to stop a session
+being redeemed twice, and FEFO ordering when a client holds more than one package.
+
+### 5.3 What a consumed session is worth, when a package is refunded
+
+**[DOCS] The menu price is not the answer, and the standard says so.** ASC 606-10-32-32: a list price
+"may be (but **shall not be presumed to be**) the standalone selling price". If nobody actually buys
+single sessions at the menu rate, that rate is not evidence. And 606-10-32-36 requires a discount to be
+allocated "proportionately to all performance obligations" — the exception in 32-37 needs three or more
+obligations with one demonstrably outside the discount, which five identical sessions cannot satisfy.
+
+So a consumed session is worth the **package rate**, not the à-la-carte price. That was going to be the
+convenient answer anyway; it is now the correct one.
+
+**[DOCS] Boulevard publishes the identical formula** and calls it standard practice — verified
+firsthand. Voucher value is "the membership or package purchase price divided by the number of voucher
+groups within that package, and then divided among the vouchers", worked through as "a package of 4
+manicures for $100 … a voucher value of $25 each", with the difference from the menu price shown on the
+order as an explicit **`Adjustment`** line: "A manicure is $35 and the voucher value is $25. Therefore,
+the adjustment is -$10."
+
+### 5.4 The consequence the owner will notice first
+
+**On package-sale day the owner sees ₱18,000 of cash and ₱0 of revenue.**
+
+That is correct, and it is what Timely migrated _to_. But it is also the moment somebody decides the
+system is broken — so the dashboard must show **cash and revenue side by side**, never one number
+labelled "sales". That is a requirement on card 0012, arriving from an accounting standard rather than
+from a design review.
+
+### 5.5 Breakage, and one question this survey cannot answer
+
+**[DOCS] Breakage is not optional.** KPMG Q7.6.15: an entity may _not_ elect to recognise it only at
+expiry — "the guidance requires an entity to **estimate** the amount of breakage to which it expects to
+be entitled."
+
+**But whether an expired package balance may be recognised as revenue at all is a question of
+Philippine escheat and unclaimed-property law, which was not researched.** ASC 606-10-55-49 and IFRS
+15.B47 both say that where amounts are remittable to the state you recognise a **liability, not
+revenue**. Zenoti ships this as a switch — "allow balances from expired packages to recognize as
+revenue" — which is exactly the decision PH law would settle.
+
+This is a question for whoever does the books, not a schema change, and it belongs on the plan's
+**Still open** list beside the variance-band review.
+
+---
+
+## 6. Customer tabs
+
+Answered in passing by §4.2 and §5.2, and the answer is that it needs **no new table**.
+
+Odoo's `pay_later` payment method carries a `receivable_account_id` and is simply not flagged
+`is_cash_count`, so deferred tenders are invisible to the drawer count automatically. Toast's house
+account is the same idea, expressed as "close out orders as paid for sales reporting purposes while
+deferring the payment towards the outstanding balance".
+
+Here that is one more `payment_method` value — `'account'` — excluded from expected cash by the same
+filter that already excludes `'package'`. A client's balance is
+`Σ(method='account') − Σ(kind='settlement')`, derived rather than stored, which is what every surveyed
+system does except the one that stores it and owns a consistency bug for it (§4.3).
+
+**Not built until shadowing finds an actual tab.** The utang line is a candidate in field study §5 with
+no decision against it, and this section exists so the cost is known rather than discovered.
