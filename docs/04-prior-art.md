@@ -359,6 +359,193 @@ before it ships.
 
 ---
 
-## 3. Packages, tabs, tips and unpaid orders
+## 3. Tips
+
+### 3.1 Three shapes, and Floreant migrated between two of them in public
+
+- **[SCHEMA] Odoo puts the tip on the sale as a product line — the shape to avoid.** `pos.order`
+  carries `is_tipped` Boolean and `tip_amount` Float; `pos.config.tip_product_id` names a product;
+  `set_tip()` creates a `PosOrderLine` holding that product and then raises the payment line's amount.
+  `pos.payment` has **no tip column at all**, so a card tip is recorded by inflating the card payment.
+  Consequences: the tip inflates sales revenue, and there is **no tip-to-employee link anywhere in
+  Odoo POS**.
+- **[SCHEMA] Square and Lightspeed put it on the tender.** `Payment.tip_money`, `Tender.tip_money`,
+  `SalePayment.tipAmount`. **Square contradicts itself in its own API**: `Payment.amount_money`
+  _excludes_ the tip, while `Tender.amount_money` _includes_ it. Whichever convention we pick has to be
+  written on the column, because a reader will assume the other one.
+- **[SCHEMA] Floreant owns a tip record, and the migration is visible in the source.** Table
+  `GRATUITY`: `AMOUNT`, **`PAID`** (has it reached the employee yet), `TICKET_ID`, **`OWNER_ID` → User**,
+  `TERMINAL_ID`. And in `Ticket.hbm.xml` the previous design is still there, commented out:
+  `gratuityAmount` / `gratuityPaid` columns on the ticket, replaced by a `many-to-one` to `Gratuity`.
+  They started where Odoo is and moved to a record with an owner and a payout flag.
+
+**[SCHEMA] Attribution is where Square is wrong for a spa.** `Payment.team_member_id` is "the
+TeamMember associated with **taking** the payment" — the front desk, not the therapist. Floreant keeps
+`GRATUITY.OWNER_ID` separate from `TICKET.OWNER_ID` precisely so the two can differ. Our
+`transactions.staff_id` is whoever entered the row, so a tip needs its own recipient column or it is
+attributed to the wrong person by construction.
+
+### 3.2 A tip counts toward expected cash if and only if it physically entered the drawer
+
+**[SCHEMA] Floreant's `DrawerPullReport.calculate()` states it as arithmetic**, and it is the
+clearest statement found anywhere:
+
+```java
+setDrawerAccountable(beginCash + totalCash - tips - totalPayout - cashBack - drawerBleed);
+// tips == getTipsPaid()  (cash handed OUT of the drawer to settle card tips)
+```
+
+`DRAWER_PULL_REPORT` stores `CASH_TIPS` and `CHARGED_TIPS` as separate columns, and **`CASH_TIPS`
+does not appear in `drawerAccountable` at all**. Only tips paid _out_ of the drawer subtract.
+
+**[DOCS] Toast reaches the same place from the other direction** by keeping the two in different
+subsystems entirely. A card tip is money the business holds and owes staff, so paying it out is a
+drawer event (`CashEntry.type = TIP_OUT`). A cash tip is never a drawer event — it is _declared_
+during shift review, and Toast is explicit that "any cash tips entered on the Toast POS device are
+ignored". Employee reconciliation is `cash sales − non-cash tips`; declared cash tips are not in that
+subtraction.
+
+**The ₱1,000-for-a-₱900-service case, resolved:**
+
+| What actually happened                                | Rows                                    | Drawer expects                             |
+| ----------------------------------------------------- | --------------------------------------- | ------------------------------------------ |
+| ₱1,000 into the drawer, ₱100 is the therapist's       | sale ₱900 + tip ₱100, cash              | **₱1,000**; the ₱100 leaves later          |
+| ₱900 into the drawer, ₱100 handed over at the counter | sale ₱900 cash + declared cash tip ₱100 | **₱900** — the tip is drawer-neutral       |
+| ₱900 on GCash, ₱100 tip on the same payment           | sale ₱900 + tip ₱100, non-cash          | **₱0**; ₱100 becomes owed to the therapist |
+
+**The system cannot infer which of the first two happened.** Whoever enters the sale has to say. That
+is the whole design problem, and it is one boolean.
+
+### 3.3 Tip versus service charge — RA 11360 is a flag other systems already have
+
+**[SOURCE] RA 11360** amends Art. 96: "All service charges collected by hotels, restaurants and
+similar establishments shall be distributed completely and equally among the covered workers except
+managerial employees." _(The twice-monthly distribution rule lives in the IRR, DOLE D.O. 206-19, which
+could not be fetched — treat that detail as unverified.)_
+
+- **[DOCS] Toast expresses the entire distinction as one setting** on the service-charge definition:
+  **"Assign to check owner (Gratuity)"** — either a gratuity paid to the check owner, or a
+  non-gratuity collected by the restaurant and added to net sales. RA 11360 is that flag, made
+  compulsory.
+- **[SCHEMA] Square uses two different objects.** `OrderServiceCharge` (percentage XOR amount,
+  `calculation_phase`, `treatment_type`, `scope`, `taxable`) versus `Payment.tip_money` — and the
+  stated rule is about _whose money it is_: use a service charge to record tips for external vendors
+  so they do not enter "the seller's internal team members' tip pool".
+
+**Decision this supports:** keep the word "tip" for discretionary money attributed to a person. If a
+mandatory charge ever appears, copy Toast's flag rather than overloading `tip_amount` — the two are
+legally different in the Philippines, not merely different in accounting.
+
+---
+
+## 4. Unpaid orders and pay-on-collection
+
+Card 0017's question, and the answer is unanimous.
+
+### 4.1 Every system points payment → order. None points order → payment.
+
+**[SCHEMA]** Square `Payment.order_id`. Odoo `pos.payment.pos_order_id` (`required=True, index=True`).
+ERPNext Payment Entry references. Lightspeed embeds a `payments[]` collection on the sale.
+
+**No surveyed system puts a mandatory payment id on the order.** `laundry_orders.transaction_id
+NOT NULL` is the shape nobody chose.
+
+**[SCHEMA] The one system that does put payment state on the order is the cautionary tale.**
+CleanCloud — a laundry POS — reduces it to scalars: `paid` (1/0), `paymentType` (an integer),
+`creditUsed`, `tip`. There is **no payment record with its own timestamp, staff member or branch**, so
+flipping `paid` from 0 to 1 says nothing about _which day's drawer_ the money belongs in. That is
+precisely the question a blind close has to answer.
+
+### 4.2 Revenue on intake day or payment day? Two coherent answers.
+
+**[DOCS] Toast's house accounts — revenue at intake, drawer untouched**, verbatim: "close out POS
+orders during a business day as **paid for sales reporting purposes**, while **deferring the
+payment(s)** towards the outstanding balance of a house account". The sale is today's revenue; the
+tender is a receivable.
+
+**[SCHEMA] Odoo implements the same idea structurally, and the mechanism is worth stealing.** An order
+is always fully tendered — a session refuses to close with drafts open — but a payment method of type
+`pay_later` ("Customer Account") carries a `receivable_account_id` of type `asset_receivable`. Then
+the drawer count simply filters:
+
+```python
+cash_payment_method = session.payment_method_ids.filtered('is_cash_count')[:1]
+```
+
+So `pay_later` tenders are **invisible to the theoretical closing balance automatically** — not by a
+special case in the close, but because they are not cash. When the customer pays later, that payment
+is an ordinary cash event on _that_ day's session.
+
+**[SCHEMA] ERPNext takes the accrual route**: a Sales Order posts no GL entry at all and carries
+`advance_paid` / `per_billed`; revenue arrives with the invoice, cash with a Payment Entry.
+
+### 4.3 Deposits are what kill a single FK
+
+**[SCHEMA]** Lightspeed derives `Sale.balance = calcTotal − calcPayments` and flips `Sale.completed`
+only when they match. ERPNext derives `outstanding_amount`. Square requires several `CreatePayment`
+calls with `autocomplete: false` then `PayOrder`, which completes the order only when the payments sum
+to the total. **Floreant is the exception and owns the bug for it** — it stores both `PAID_AMOUNT` and
+`DUE_AMOUNT` as columns.
+
+A deposit means **many payments per order**. That is the fact that decides the column shape, more than
+pay-on-claim does.
+
+### 4.4 Never collected
+
+Undocumented across the laundry vertical — no CleanCloud or SPOT article on aging or unclaimed orders,
+despite both vendors' own customers publishing 30-and-90-day abandonment terms (field study §7).
+General mechanisms: **[DOCS]** Toast force-closes stale open checks at a configurable closeout hour
+(default 04:00 local) with zero tips; **[SCHEMA]** ERPNext writes off via
+`Sales Invoice.write_off_amount` / `write_off_account`.
+
+### 4.5 What this settles for the migration
+
+**Build:**
+
+1. **`laundry_orders.transaction_id` becomes nullable.** Nothing surveyed supports a mandatory payment
+   id on an order.
+2. **Snapshot the payment mode on the order, not only on the branch.** Add
+   `payment_mode ('at_intake' | 'on_claim')`, written at intake from the branch setting, with
+   `CHECK (payment_mode = 'on_claim' OR transaction_id IS NOT NULL)`. **A branch-level check
+   constraint cannot see the branch row**, and a branch will change modes while orders are open — the
+   registered risk already names "an order taken in one mode and claimed after the branch switched" as
+   the case that will actually occur. Every surveyed system stores the tender kind on the sale rather
+   than looking it up, for the same reason.
+3. **Expected cash stays `Σ transactions` and never reads `laundry_orders`.** Toast, Odoo and Floreant
+   all compute the drawer from payment events only. An unpaid order contributes zero on intake day;
+   the claim-day payment is an ordinary cash transaction on the claim day's close. Both modes plus the
+   mode-switch case belong in the pure function's unit tests before either intake screen exists.
+4. **If tips are recorded at all, record three things:** `tip_amount numeric(12,2) not null default 0`,
+   `tip_recipient_staff_id uuid null` (distinct from `staff_id`, which is whoever entered the row), and
+   `tip_in_drawer boolean not null`. Expected cash adds `tip_amount` only where
+   `tip_in_drawer and payment_method = 'cash'`. That boolean is the entire ₱1,000/₱900 problem.
+5. **Comment the tender convention on the column**, because Square proves a reader will assume the
+   other one. Recommended: `amount` is service revenue, `tip_amount` is broken out, the drawer sees
+   `amount + tip_amount` filtered as above.
+
+**Skip in v1:**
+
+- **A tip product line** (Odoo's shape) — inflates revenue with staff money and gives no attribution.
+- **Tip-out ledgers and tip pooling.** Toast's `TIP_OUT` machinery exists because card tips are settled
+  in cash nightly. With cash-dominant branches and rare GCash tips the balance owed is small.
+- **Service charges, auto-gratuity, `treatment_type`, `scope`.** No mandatory charge exists here yet.
+- **Deposits and partial payments.** They force many-payments-per-order and immediately break the
+  nullable single FK. Record the cost explicitly: if deposits are ever wanted, that is when a
+  `laundry_order_payments` join table arrives — so it is priced rather than discovered.
+- **A stored `balance_due`.** Every system derives it except the one that owns a consistency bug.
+- **A tip prompt on the laundry intake path.** A tap on the entry that must stay at four, for the one
+  business where tipping is rare.
+- **Aging or write-off of uncollected orders.** Nothing in the vertical automates it; the stale-order
+  filter already planned for the status board is the equivalent.
+
+---
+
+## 5. Packages and customer tabs
 
 Researched separately; this section is written when that lands.
+
+One answer is already visible from §4.2, though: **a running tab needs no new table.** Odoo's
+`pay_later` payment method — non-cash, pointed at a receivable account — is invisible to the drawer
+count automatically, because the close filters on `is_cash_count` rather than special-casing anything.
+Toast's house account is the same idea. If shadowing turns up utang at any branch, that is the cheapest
+correct shape.
