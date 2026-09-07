@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { isCiPlaceholder } from "../tests/support/ci-placeholder";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -42,6 +43,21 @@ const RLS_VARS = [
 ] as const;
 
 /**
+ * Set to something somebody chose, rather than absent or invented by CI.
+ *
+ * "Present" stopped being the right question on 2026-09-07. `instrumentation.ts` now checks the
+ * server environment at startup, so `ci.yml` has to give the e2e job a value for every variable or
+ * the dev server will not boot - and a placeholder that reads as configuration would send the
+ * authenticated specs to sign in against a project that does not exist. See
+ * `tests/support/ci-placeholder.ts`; `tests/ci-placeholders.test.ts` is what keeps the two ends of
+ * that convention spelled the same way.
+ */
+function configured(name: (typeof RLS_VARS)[number]): boolean {
+  const value = process.env[name];
+  return !!value && !isCiPlaceholder(value);
+}
+
+/**
  * Null when the suite has nothing to run against. Callers must skip, not pass.
  *
  * **Partial configuration throws instead.** Nobody sets two of these three on purpose, so a
@@ -75,11 +91,11 @@ const RLS_VARS = [
  * refuses to run on half a set.
  */
 export function rlsFullyConfigured(): boolean {
-  return RLS_VARS.every((name) => !!process.env[name]);
+  return RLS_VARS.every(configured);
 }
 
 export function rlsEnv(): RlsEnv | null {
-  const missing = RLS_VARS.filter((name) => !process.env[name]);
+  const missing = RLS_VARS.filter((name) => !configured(name));
   if (missing.length === RLS_VARS.length) return null;
   if (missing.length > 0) {
     throw new Error(

@@ -62,11 +62,20 @@ jobs:
           # a fork, or on a repository where nobody has added a secret yet.
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321' }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'ci-placeholder-anon-key' }}
-          # No placeholder for this one, deliberately. It is what the authenticated suite uses to
-          # create its personas, and without it `rlsEnv` returns null, the setup project skips and
-          # the signed-in specs skip with it. A placeholder would make them attempt a sign-in
-          # against a project that is not there and fail for the wrong reason.
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # This one deliberately had no placeholder, so that its absence made the authenticated
+          # specs skip. That stopped working on 2026-09-07: `instrumentation.ts` calls `serverEnv()`
+          # at startup, so an absent value is no longer a skipped project - it is a dev server that
+          # refuses to boot and a run where every spec is red.
+          #
+          # It gets a placeholder like the others, and the skip survives because the value says what
+          # it is. `rlsFullyConfigured` treats a `ci-placeholder…` value as unconfigured, so the
+          # authenticated specs still skip rather than signing in against a project that is not
+          # there - see tests/support/ci-placeholder.ts.
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'ci-placeholder-service-role-key' }}
+          # Read at startup by lib/env.ts, which refuses anything under 32 characters - so this
+          # placeholder is long rather than tidy. No spec uses the value: the cron route that will
+          # check it does not exist yet, and this is here so the server starts.
+          CRON_SECRET: ${{ secrets.CRON_SECRET || 'ci-placeholder-cron-secret-thirty-two-plus' }}
 
   bundle:
     # Card #15: the bundle budget is a CI gate, not a habit. The Workers free plan caps a
