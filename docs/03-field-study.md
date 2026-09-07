@@ -13,6 +13,13 @@ hold. Those are the questions worth arriving with.
 by looking for the document, not by asking whether the visits happened — so a section left blank is a
 section that blocks the migration, which is the intended behaviour.
 
+**Since 2026-09-07 it is also pre-filled, and that changes nothing about the gate.** §7 holds
+researched predictions about what a Philippine laundry, spa or clinic typically does, and the phone
+version of this instrument shows them in every answer box marked `prediction`. They exist to make the
+visit faster, not to replace it: a pre-filled line counts as unanswered until somebody confirms it at
+a counter, and none of them may be promoted into §5 by reading. The mobile version is the artifact
+titled **Shadow the Notebook**.
+
 ---
 
 ## 1. One sale, as the system would store it
@@ -185,3 +192,88 @@ writing it down is that nobody rediscovers it as a bug in month three.
 
 Card 0001 closes when §5 has a decision against every line and this table names a branch and a date
 for each business. Then, and not before, card 0026 writes the migrations.
+
+---
+
+## 7. Researched predictions, 2026-09-07 — read this as a hypothesis, not a record
+
+Every answer in this section came from published sources about Philippine small businesses, not from
+looking at these three shops. It is here for one reason: **so the visit is ten minutes of correcting
+rather than an hour of composing.** The same text is pre-filled into the phone version of this
+instrument, where each line reads as `prediction` and counts as zero on the progress rail until
+somebody taps _Confirmed on the ground_.
+
+**Nothing here may be promoted to §5 by reading it.** A prediction that turns out right is still a
+prediction until a person saw it, and the fields that hurt are the ones nobody thought to ask about —
+which is the whole reason this card asks for shadowing rather than an interview.
+
+### 7.1 Six findings that change a decision already made
+
+1. **Pay-on-claim may be the norm, not the exception.** One PH laundry franchise's published terms
+   require payment on collection and retain the goods until paid; PH laundry tooling describes an
+   unpaid open ticket as "the normal flow for drop-off laundry". Card 0017 makes the payment link
+   optional and q-answers set a per-branch toggle **defaulting to pay now** — that default is now the
+   suspicious half. Ask which way each branch actually runs before fixing it.
+
+2. **The paper cash count is by denomination, and it is signed twice.** The standard PH cash-count
+   sheet has a row per denomination (₱1000 down to coins) with quantity × amount, a grand total, an
+   explicit **CASH OVER / SHORT** line, and a signature — and the daily report is _acknowledged by a
+   second person_, the incoming cashier or a frontliner. `daily_closes` stores one `declared_cash` and
+   one `closed_by`. **The digital close currently records less than the notebook it replaces**, on the
+   one screen the whole cash story rests on. Two candidate lines are now in §5 for it.
+
+3. **The lost-stub answer is government ID first.** The only documented PH policy found: "If the
+   Service Order is not available, the customer must present valid proof of identification, such as a
+   current government-issued ID." Name and phone are what shops actually _search_ by. Card 0009 is
+   sized for phone lookup and that stays right — but note the stub is treated as a **bearer
+   instrument** ("released to any holder of the Service Order"), which is a constraint on any digital
+   claim flow that assumes the claimer is the customer.
+
+4. **"Official Receipt" is no longer the only word to avoid.** Post-RR 7-2024 the **invoice** is the
+   principal BIR document for services, and the OR is demoted to supplementary. The brief says nothing
+   is ever labelled "Official Receipt" or "OR"; the same sentence now has to cover **"Invoice"**. Two
+   independent PH laundry vendors state plainly that claim stubs are internal documents and do not
+   replace BIR documents — which is the position this system takes, and it is worth saying on the
+   printed stub rather than only in a spec.
+
+5. **Packages are the spa and clinic's real record, and nobody tracks the balance.** PH clinics
+   publish per-session _and_ per-package prices ("4+1 sessions for ₱2,400", "5 sessions ₱18,000").
+   Selling a package and using a session are different events; the schema has neither. The documented
+   failure mode is the front desk losing count between visit three and seven. This is a bigger gap
+   than "no line items" and it is not on the board.
+
+6. **Attendance already has a shape, and it answers card 0021.** Small PH shops keep a logbook as the
+   primary record, and at the end of each payroll cycle staff fill a **DTR** from it. The manual DTR is
+   one sheet per employee per month carrying employee name, month and year, and columns for **log-in,
+   break time and duration, log-out, undertime**, plus a **supervisor's name and signature**. That is
+   the column set the CSV should match — see card 0021.
+
+### 7.2 What the research could not find
+
+Worth knowing, because these are the questions the visit has to answer and no amount of reading will:
+
+- **No photograph, scan or verbatim field list of an actual PH laundry claim stub.**
+- **The ticket-numbering reset rule.** No source states whether numbers are per-branch, per-day or
+  per-year, or when they roll over. The only guidance is "sequential". Card 0020's display format and
+  reset rule stay a branch decision, which is what that card already says.
+- **Whether the person counting the drawer knows the expected figure first.** No PH evidence either
+  way. This is the single most valuable thing to _watch_ rather than ask, because the answer decides
+  whether the blind close is a feature or a change to how people work.
+- **A typical float amount.** Every form has an "opening cash" field; no source gives a number.
+- **Where a GCash reference number is physically written**, if anywhere. Merchant practice is to trust
+  the "GCash Payment Received" SMS rather than a screenshot, which suggests the reference may live
+  only on the staff phone.
+- **Whether small PH spas record tips at all.** A ₱100 note handed to a therapist probably never
+  touches the drawer. RA 11360 makes a pooled _service charge_ legally distinct from a direct tip —
+  100% to rank-and-file, distributed at least twice monthly — so recording them identically would be
+  wrong in law, not only in accounting.
+- **The paper form of a spa or clinic client card.** DOH rules for massage clinics (AO 2010-0034 /
+  PD 856 Ch. XIII) govern sanitary permits and inspections and say nothing about client logbooks;
+  customer logs, where required at all, come from LGU ordinances.
+
+### 7.3 One thing to say out loud before the visit
+
+Deducting a cash shortage from wages is the reflex, and Articles 113–114 of the Labor Code generally
+forbid it without individualised written consent and due process. This system is about to start
+attributing a variance to a named person at a named branch. That is the point of it — and it is worth
+deciding, before the first close, what happens to the person on the wrong end of one.
