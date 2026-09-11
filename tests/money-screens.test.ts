@@ -42,6 +42,15 @@ const ATTRIBUTION: Record<string, string> = {
     "dashboard is a roll-up across businesses rather than a branch screen: its shell says 'All " +
     "branches', its subtitle counts them, and every figure inside it is attributed by business in " +
     "the share bar and the by-business table.",
+
+  "app/(app)/b/[branchId]/sell/page.tsx":
+    "The counter, against a real branch. `CounterScreen` carries `businessName · branchName` in " +
+    "its own first line below sm - where the shell's top bar is hidden - and the bar names it from " +
+    "sm up, which is the same arrangement the preview is asserted at. The branch cannot be stale: " +
+    "it comes from the route parameter rather than from the selected-branch cookie, so the figure " +
+    "on screen and the branch in the URL are the same fact. And the confirmation names it a second " +
+    "time in its own right, beside who took the sale and when, because that panel is what somebody " +
+    "reads back to a customer.",
 };
 
 /** Files that are the entry point of a route. */

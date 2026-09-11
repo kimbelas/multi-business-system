@@ -291,9 +291,30 @@ const NAV_HREF: Partial<Record<NavItem, string>> = {
   Settings: "/settings",
 };
 
-/** The destinations this role can reach AND that have somewhere to go. */
-export function destinationsFor(role: Role): { item: NavItem; href: string }[] {
+/**
+ * The screens that exist per branch, and therefore cannot have a fixed address.
+ *
+ * Separate from `NAV_HREF` rather than folded into it as a template string, because a branch id
+ * interpolated into a literal is a route that typechecks and 404s. A function takes the id it
+ * needs and the caller cannot forget to supply one.
+ */
+const BRANCH_NAV_HREF: Partial<Record<NavItem, (branchId: string) => string>> = {
+  Counter: (branchId) => `/b/${branchId}/sell`,
+};
+
+/**
+ * The destinations this role can reach AND that have somewhere to go.
+ *
+ * Pass `branchId` where one is selected and the branch-scoped screens join the list; omit it and
+ * only the fixed ones do. Omitting it is not a smaller menu of the same thing - it is the honest
+ * answer when there is no branch to record a sale against.
+ */
+export function destinationsFor(role: Role, branchId?: string): { item: NavItem; href: string }[] {
   return navFor(role)
-    .filter((item) => NAV_HREF[item] !== undefined)
-    .map((item) => ({ item, href: NAV_HREF[item]! }));
+    .map((item) => {
+      const branchHref = branchId ? BRANCH_NAV_HREF[item]?.(branchId) : undefined;
+      const href = branchHref ?? NAV_HREF[item];
+      return href ? { item, href } : null;
+    })
+    .filter((entry): entry is { item: NavItem; href: string } => entry !== null);
 }

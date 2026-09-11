@@ -34,7 +34,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const destinations = [
     { label: "Today", href: "/" },
     ...(branchCount > 1 ? [{ label: "Switch", href: "/switch" }] : []),
-    ...destinationsFor(scope.activeRole).map((d) => ({ label: d.item, href: d.href })),
+    ...destinationsFor(scope.activeRole, scope.activeBranch?.id).map((d) => ({
+      label: d.item,
+      href: d.href,
+    })),
   ];
 
   return (

@@ -11,8 +11,14 @@ import { cn } from "@/lib/utils";
  * its floor fails `tests/design-tokens.test.ts` instead of shipping.
  */
 
-export const PAYMENT_METHODS = ["cash", "gcash", "maya"] as const;
-export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+/*
+ * Re-exported, not defined here. This module is `"use client"`, and a value imported from a client
+ * module into a server module becomes a client-reference proxy rather than the value - see
+ * `lib/payment.ts`, which carries the whole story. Client code may keep importing it from here.
+ */
+import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/payment";
+
+export { PAYMENT_METHODS, type PaymentMethod };
 
 const METHOD_LABEL: Record<PaymentMethod, string> = {
   cash: "Cash",
